@@ -14,7 +14,7 @@
 
 - name: remnawave | panel | Auto-generate JWT auth secret
   ansible.builtin.shell:
-    cmd: openssl rand -hex 32
+    cmd: openssl rand -hex 64
   register: remnawave_jwt_auth_secret_gen
   changed_when: false
   when: remnawave_jwt_auth_secret | length == 0
@@ -31,7 +31,7 @@
 
 - name: remnawave | panel | Auto-generate JWT API tokens secret
   ansible.builtin.shell:
-    cmd: openssl rand -hex 32
+    cmd: openssl rand -hex 64
   register: remnawave_jwt_api_tokens_secret_gen
   changed_when: false
   when: remnawave_jwt_api_tokens_secret | length == 0
@@ -81,6 +81,23 @@
       {{ remnawave_sub_public_domain
          if remnawave_sub_public_domain | length > 0
          else remnawave_domain ~ '/api/sub' }}
+
+- name: remnawave | panel | Set webhook secret header
+  ansible.builtin.set_fact:
+    remnawave_webhook_secret_header_value: "{{ remnawave_webhook_secret_header }}"
+  when: remnawave_webhook_secret_header | length > 0
+
+- name: remnawave | panel | Auto-generate webhook secret header
+  ansible.builtin.shell:
+    cmd: openssl rand -hex 64
+  register: remnawave_webhook_secret_header_gen
+  changed_when: false
+  when: remnawave_webhook_secret_header | length == 0
+
+- name: remnawave | panel | Set webhook secret header fact
+  ansible.builtin.set_fact:
+    remnawave_webhook_secret_header_value: "{{ remnawave_webhook_secret_header_gen.stdout }}"
+  when: remnawave_webhook_secret_header | length == 0
 
 - name: remnawave | panel | Deploy .env file
   ansible.builtin.template:

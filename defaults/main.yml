@@ -53,7 +53,7 @@ remnawave_node_port: 2222
 ## =====================
 ## Secrets
 ## =====================
-## All secrets below are auto-generated (openssl rand -hex 32) if left empty.
+## All secrets below are auto-generated (openssl rand -hex 64) if left empty.
 ## Generated values are stored only in the deployed .env file on the target host.
 ## To pin a value, set it here (use ansible-vault to encrypt).
 
@@ -71,6 +71,10 @@ remnawave_node_secret_key: ""
 
 ## Prometheus metrics basic auth password
 remnawave_metrics_pass: ""
+
+## Webhook secret header (at least 32 chars, only a-z, 0-9, A-Z)
+## Auto-generated if empty. Set explicitly if webhook is enabled.
+remnawave_webhook_secret_header: ""
 
 ## =====================
 ## Subscription
@@ -128,6 +132,15 @@ remnawave_metrics_user: admin
 
 ## Enable Swagger/Scalar API docs (/docs, /scalar)
 remnawave_swagger_enabled: false
+
+## Enable HTTP request logging in the backend (useful for debugging)
+remnawave_http_logging_enabled: false
+
+## JWT auth token lifetime in hours (12–168)
+remnawave_jwt_auth_lifetime: 12
+
+## Length of generated short UUID for subscription links (16–64)
+remnawave_short_uuid_length: 16
 
 ## =====================
 ## Russia geo-files (russia-v2ray-rules-dat)
