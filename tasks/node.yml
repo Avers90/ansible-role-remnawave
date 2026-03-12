@@ -7,22 +7,12 @@
     owner: root
     group: root
 
-- name: remnawave | node | Generate node secret key
-  ansible.builtin.set_fact:
-    remnawave_node_secret_key_value: "{{ remnawave_node_secret_key }}"
-  when: remnawave_node_secret_key | length > 0
-
-- name: remnawave | node | Auto-generate node secret key
-  ansible.builtin.shell:
-    cmd: openssl rand -hex 32
-  register: remnawave_node_secret_key_gen
-  changed_when: false
-  when: remnawave_node_secret_key | length == 0
-
 - name: remnawave | node | Set node secret key fact
   ansible.builtin.set_fact:
-    remnawave_node_secret_key_value: "{{ remnawave_node_secret_key_gen.stdout }}"
-  when: remnawave_node_secret_key | length == 0
+    remnawave_node_secret_key_value: "{{ remnawave_node_secret_key }}"
+  # If vault_remnawave_node_secret_key is set — it will be written to .env on fresh deploy.
+  # If empty — SECRET_KEY will be blank; node won't start until key is obtained from panel UI
+  # (Nodes → Add Node → copy SECRET_KEY → paste into /opt/remnanode/.env → restart container).
 
 - name: remnawave | node | Deploy .env file
   ansible.builtin.template:
@@ -33,21 +23,6 @@
     group: root
     force: false
   no_log: true
-
-- name: remnawave | node | Save node credentials to file
-  ansible.builtin.copy:
-    content: |
-      # Remnawave Node credentials
-      # Copy SECRET_KEY from panel UI (Nodes -> Add node) and paste it into .env
-      # Then restart the node: docker compose -f /opt/remnanode/docker-compose.yml restart
-
-      NODE_PORT={{ remnawave_node_port }}
-      SECRET_KEY_PLACEHOLDER=<copy SECRET_KEY from panel Web UI>
-    dest: "{{ remnawave_node_dir }}/credentials.txt"
-    mode: "0600"
-    owner: root
-    group: root
-    force: false
 
 # Russia geo-files must be downloaded BEFORE starting the container
 # because they are bind-mounted into the node container at startup
