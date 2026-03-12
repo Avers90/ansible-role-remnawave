@@ -1,0 +1,36 @@
+---
+- name: remnawave | nginx | Remove legacy vhost (without .conf extension)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/remnawave
+    - /etc/nginx/sites-available/remnawave
+  notify: Reload nginx
+
+- name: remnawave | nginx | Deploy fallback vhost
+  ansible.builtin.template:
+    src: remnawave-nginx.conf.j2
+    dest: /etc/nginx/sites-available/remnawave.conf
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Reload nginx
+
+- name: remnawave | nginx | Validate nginx configuration
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+
+- name: remnawave | nginx | Enable fallback vhost
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/remnawave.conf
+    dest: /etc/nginx/sites-enabled/remnawave.conf
+    state: link
+  notify: Reload nginx
+
+- name: remnawave | nginx | Disable default vhost (conflicts with fallback port)
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx

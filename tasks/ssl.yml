@@ -1,0 +1,84 @@
+---
+- name: remnawave | ssl | Install acme.sh dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - cron
+      - socat
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: remnawave | ssl | Check if acme.sh is installed
+  ansible.builtin.stat:
+    path: /root/.acme.sh/acme.sh
+  register: remnawave_acmesh_stat
+
+- name: remnawave | ssl | Install acme.sh
+  ansible.builtin.shell:
+    cmd: "curl -fsSL https://get.acme.sh | sh -s email={{ remnawave_ssl_email }}"
+    creates: /root/.acme.sh/acme.sh
+  when: not remnawave_acmesh_stat.stat.exists
+
+- name: remnawave | ssl | Set default CA to Let's Encrypt
+  ansible.builtin.command:
+    cmd: /root/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+  changed_when: false
+
+- name: remnawave | ssl | Enable acme.sh auto-upgrade
+  ansible.builtin.command:
+    cmd: /root/.acme.sh/acme.sh --upgrade --auto-upgrade
+  changed_when: false
+
+- name: remnawave | ssl | Create certificate directory
+  ansible.builtin.file:
+    path: "{{ remnawave_cert_dir }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+
+- name: remnawave | ssl | Check if certificate already exists
+  ansible.builtin.stat:
+    path: "{{ remnawave_cert_dir }}/{{ remnawave_domain }}.cer"
+  register: remnawave_cert_stat
+
+- name: remnawave | ssl | Issue SSL certificate via webroot
+  ansible.builtin.command:
+    cmd: >
+      /root/.acme.sh/acme.sh
+      --issue
+      -d {{ remnawave_domain }}
+      --webroot /var/www/html
+  register: remnawave_cert_issue
+  changed_when: "'Cert success' in remnawave_cert_issue.stdout"
+  failed_when:
+    - remnawave_cert_issue.rc != 0
+    - "'Domains not changed' not in remnawave_cert_issue.stdout"
+  when: not remnawave_cert_stat.stat.exists
+
+- name: remnawave | ssl | Install SSL certificate
+  ansible.builtin.command:
+    cmd: >
+      /root/.acme.sh/acme.sh
+      --installcert
+      -d {{ remnawave_domain }}
+      --cert-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}.cer
+      --key-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}.key
+      --fullchain-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}-fullchain.cer
+      --reloadcmd "docker compose -f {{ remnawave_install_dir }}/docker-compose.yml restart remnawave"
+  when: not remnawave_cert_stat.stat.exists or (remnawave_cert_issue is defined and remnawave_cert_issue.changed)
+
+- name: remnawave | ssl | Fix certificate file permissions
+  ansible.builtin.file:
+    path: "{{ remnawave_cert_dir }}/{{ item.name }}"
+    mode: "{{ item.mode }}"
+    owner: root
+    group: root
+  loop:
+    - { name: "{{ remnawave_domain }}.key", mode: "0600" }
+    - { name: "{{ remnawave_domain }}.cer", mode: "0644" }
+    - { name: "{{ remnawave_domain }}-fullchain.cer", mode: "0644" }
+  loop_control:
+    label: "{{ item.name }}"
+  when: not remnawave_cert_stat.stat.exists or (remnawave_cert_issue is defined and remnawave_cert_issue.changed)

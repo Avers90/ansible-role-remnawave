@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+# Remnawave Node (Xray-core) — Docker Compose
+# Managed by Ansible — do not edit manually
+#
+# IMPORTANT: network_mode: host is required so Xray can bind to all ports
+# (VLESS, Reality, etc.) directly on the host network interface.
+# The node_port is used only for internal gRPC communication with the panel.
+
+services:
+  remnanode:
+    image: remnawave/node:{{ remnawave_node_version }}
+    container_name: remnanode
+    hostname: remnanode
+    network_mode: host
+    restart: always
+    cap_add:
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+        max-file: "5"
+    environment:
+      - NODE_PORT={{ remnawave_node_port }}
+      - SECRET_KEY={{ remnawave_node_secret_key_value }}
+    volumes:
+      - '{{ remnawave_cert_dir }}:/certs:ro'
+{% if remnawave_geo_russia_enabled | bool %}
+      - '{{ remnawave_geo_dir }}/geoip.dat:/usr/local/share/xray/geoip.dat'
+      - '{{ remnawave_geo_dir }}/geosite.dat:/usr/local/share/xray/geosite.dat'
+{% endif %}

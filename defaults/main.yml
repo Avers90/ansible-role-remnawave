@@ -1,0 +1,169 @@
+---
+## ansible-role-remnawave defaults
+
+## =====================
+## Paths
+## =====================
+
+## Directory for Remnawave Panel (backend + docker-compose)
+remnawave_install_dir: /opt/remnawave
+
+## Directory for Remnawave Node (Xray, docker-compose)
+remnawave_node_dir: /opt/remnanode
+
+## Directory for TLS certificates (mounted into backend container)
+remnawave_cert_dir: /opt/remnawave/certs
+
+## =====================
+## Required variables
+## =====================
+
+## Domain name for the panel (used for TLS cert + subscription URL)
+## MUST be set — role will fail if empty
+remnawave_domain: ""
+
+## Email for acme.sh Let's Encrypt certificate issuance
+## MUST be set — role will fail if empty
+remnawave_ssl_email: ""
+
+## =====================
+## Versions
+## =====================
+
+## Docker image tag for remnawave/backend
+remnawave_panel_version: "latest"
+
+## Docker image tag for remnawave/node
+remnawave_node_version: "latest"
+
+## =====================
+## Ports
+## =====================
+
+## Remnawave backend API port (127.0.0.1 only)
+remnawave_app_port: 3000
+
+## Remnawave Prometheus metrics port (127.0.0.1 only)
+remnawave_metrics_port: 3001
+
+## Node gRPC API port — used by backend to push Xray configs to node
+## Must not be exposed to the internet; restrict to panel IP in firewall
+remnawave_node_port: 2222
+
+## =====================
+## Secrets
+## =====================
+## All secrets below are auto-generated (openssl rand -hex 32) if left empty.
+## Generated values are stored only in the deployed .env file on the target host.
+## To pin a value, set it here (use ansible-vault to encrypt).
+
+## JWT secret for user authentication
+remnawave_jwt_auth_secret: ""
+
+## JWT secret for API tokens
+remnawave_jwt_api_tokens_secret: ""
+
+## PostgreSQL password
+remnawave_postgres_password: ""
+
+## Secret key shared between backend and node (must match on both sides)
+remnawave_node_secret_key: ""
+
+## Prometheus metrics basic auth password
+remnawave_metrics_pass: ""
+
+## =====================
+## Subscription
+## =====================
+
+## Public domain used in subscription links (profile-web-page-url header).
+## Default: {{ remnawave_domain }}/api/sub
+## Override if subscription page is on a different domain.
+remnawave_sub_public_domain: ""
+
+## =====================
+## nginx fallback vhost
+## =====================
+
+## Deploy nginx fallback vhost (sites-available/remnawave.conf)
+## Set to false to manage nginx config manually
+remnawave_nginx_config_deploy: true
+
+## Port nginx listens on for Xray fallback (127.0.0.1 only)
+## Xray forwards non-VPN HTTPS traffic here
+remnawave_nginx_fallback_port: 8080
+
+## Document root for the decoy static site
+remnawave_site_root: /var/www/html
+
+## Access log for the fallback vhost
+remnawave_site_access_log: /var/log/nginx/remnawave-access.log
+
+## Error log for the fallback vhost
+remnawave_site_error_log: /var/log/nginx/remnawave-error.log
+
+## Add security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
+remnawave_site_security_headers: true
+
+## =====================
+## Telegram notifications (optional)
+## =====================
+
+remnawave_telegram_enabled: false
+remnawave_telegram_bot_token: ""
+remnawave_telegram_notify_users_chat_id: ""
+remnawave_telegram_notify_nodes_chat_id: ""
+remnawave_telegram_notify_crm_chat_id: ""
+
+## =====================
+## Optional features
+## =====================
+
+## Number of backend API worker instances
+## Possible values: max, -1, or integer. Do not exceed physical CPU count.
+remnawave_api_instances: 1
+
+## Prometheus metrics basic auth user
+remnawave_metrics_user: admin
+
+## Enable Swagger/Scalar API docs (/docs, /scalar)
+remnawave_swagger_enabled: false
+
+## =====================
+## Russia geo-files (russia-v2ray-rules-dat)
+## =====================
+## Custom geoip.dat and geosite.dat with Russian blocked domains and IPs.
+## Source: https://github.com/runetfreedom/russia-v2ray-rules-dat
+## Updated every 6 hours; files are mounted into the remnawave/node container
+## at /usr/local/share/xray/ alongside the default Xray geo files.
+##
+## Usage in Xray config (reference by category):
+##   geoip:ru-blocked         — blocked IPs (antifilter.download)
+##   geoip:ru-blocked-community — community blocked IPs
+##   geosite:ru-blocked       — blocked domains (antifilter + re:filter)
+##   geosite:ru-blocked-all   — all known blocked domains (700k+, use carefully)
+##   geosite:ru-available-only-inside — domains available only inside Russia
+
+## Enable downloading and mounting Russia geo-files into the node container
+remnawave_geo_russia_enabled: true
+
+## Directory on the host where geo-files are stored
+remnawave_geo_dir: "{{ remnawave_node_dir }}/geo"
+
+## Download URLs (release branch — always latest)
+remnawave_geo_geoip_url: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat"
+remnawave_geo_geosite_url: "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat"
+
+## Cron schedule for automatic geo-file updates
+## Default: daily at 04:00 (files are updated every 6h upstream)
+remnawave_geo_cron_enabled: true
+remnawave_geo_cron_hour: "4"
+remnawave_geo_cron_minute: "0"
+
+## =====================
+## Service
+## =====================
+
+remnawave_service_name: remnawave
+remnawave_service_enabled: true
+remnawave_service_state: started

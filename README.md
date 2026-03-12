@@ -1,1 +1,193 @@
 # ansible-role-remnawave
+
+Installs and configures [Remnawave](https://docs.rw) — a proxy management panel built on Xray-core — using Docker Compose on Debian/Ubuntu.
+
+## Architecture
+
+```
+Port 80   → nginx (apt, ansible-role-nginx)
+              ├── /.well-known/acme-challenge → webroot (acme.sh)
+              └── / → optional redirect to https://
+
+Port 443  → remnawave/node (Xray, Docker, network_mode: host)
+              ├── VPN traffic (VLESS, Reality, Trojan, etc.)
+              └── fallback → 127.0.0.1:8080 (non-VPN HTTPS)
+
+Port 8080 → nginx (apt) fallback vhost (127.0.0.1 only)
+              ├── /api/*, /dashboard/*, /sub/*, /docs/* → backend:3000
+              └── / → /var/www/html (decoy static site)
+
+Port 3000 → remnawave/backend (Docker, 127.0.0.1 only)
+Port 3001 → Prometheus metrics (Docker, 127.0.0.1 only)
+Port 6767 → PostgreSQL (Docker, 127.0.0.1 only)
+Port 2222 → remnawave/node gRPC API (backend ↔ node)
+```
+
+## Requirements
+
+- Debian 11/12 or Ubuntu 20.04/22.04/24.04
+- Docker CE installed (`ansible-role-docker` must run before this role)
+- nginx installed and running on port 80 (`ansible-role-nginx` must run before this role — needed for acme.sh webroot challenge)
+- `community.docker` Ansible collection
+
+## Role Variables
+
+### Required
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_domain` | `""` | Domain name for TLS certificate and panel access |
+| `remnawave_ssl_email` | `""` | Email for Let's Encrypt certificate issuance |
+
+### Paths
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_install_dir` | `/opt/remnawave` | Backend + docker-compose directory |
+| `remnawave_node_dir` | `/opt/remnanode` | Node docker-compose directory |
+| `remnawave_cert_dir` | `/opt/remnawave/certs` | TLS certificate storage (mounted into both backend and node containers) |
+
+### Versions
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_panel_version` | `"latest"` | `remnawave/backend` Docker image tag |
+| `remnawave_node_version` | `"latest"` | `remnawave/node` Docker image tag |
+
+### Ports
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_app_port` | `3000` | Backend API port (127.0.0.1 only) |
+| `remnawave_metrics_port` | `3001` | Prometheus metrics port (127.0.0.1 only) |
+| `remnawave_node_port` | `2222` | Node gRPC port (backend ↔ node communication) |
+
+### Secrets (auto-generated if empty)
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_jwt_auth_secret` | `""` | JWT auth secret (32-byte hex) |
+| `remnawave_jwt_api_tokens_secret` | `""` | JWT API tokens secret (32-byte hex) |
+| `remnawave_postgres_password` | `""` | PostgreSQL password |
+| `remnawave_node_secret_key` | `""` | Shared secret between backend and node (32-byte hex) |
+| `remnawave_metrics_pass` | `""` | Prometheus basic auth password |
+
+> All secrets are auto-generated via `openssl rand` on first run and stored only in `.env` on the target host. To pin values, set them in vars and encrypt with `ansible-vault`.
+
+### Subscription
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_sub_public_domain` | `""` | Subscription URL domain. Default: `{{ remnawave_domain }}/api/sub` |
+
+### nginx fallback vhost
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_nginx_config_deploy` | `true` | Deploy nginx fallback vhost |
+| `remnawave_nginx_fallback_port` | `8080` | Port nginx listens on for Xray fallback (127.0.0.1 only) |
+| `remnawave_site_root` | `/var/www/html` | Decoy static site document root |
+| `remnawave_site_access_log` | `/var/log/nginx/remnawave-access.log` | Access log path |
+| `remnawave_site_error_log` | `/var/log/nginx/remnawave-error.log` | Error log path |
+| `remnawave_site_security_headers` | `true` | Add security headers (X-Frame-Options etc.) |
+
+### Telegram notifications (optional)
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_telegram_enabled` | `false` | Enable Telegram notifications |
+| `remnawave_telegram_bot_token` | `""` | Bot token |
+| `remnawave_telegram_notify_users_chat_id` | `""` | Chat ID for user events |
+| `remnawave_telegram_notify_nodes_chat_id` | `""` | Chat ID for node events |
+| `remnawave_telegram_notify_crm_chat_id` | `""` | Chat ID for CRM events |
+
+### Optional features
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_api_instances` | `1` | Backend worker instances (`max`, `-1`, or integer) |
+| `remnawave_metrics_user` | `admin` | Prometheus basic auth user |
+| `remnawave_swagger_enabled` | `false` | Enable Swagger/Scalar API docs at `/docs` and `/scalar` |
+
+### Russia geo-files (russia-v2ray-rules-dat)
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_geo_russia_enabled` | `true` | Download and mount Russia geo-files into node container |
+| `remnawave_geo_dir` | `{{ remnawave_node_dir }}/geo` | Host directory for geo-files |
+| `remnawave_geo_geoip_url` | *(github release)* | Download URL for `geoip.dat` |
+| `remnawave_geo_geosite_url` | *(github release)* | Download URL for `geosite.dat` |
+| `remnawave_geo_cron_enabled` | `true` | Enable daily cron job for geo-file updates |
+| `remnawave_geo_cron_hour` | `"4"` | Cron hour for geo-file updates |
+| `remnawave_geo_cron_minute` | `"0"` | Cron minute for geo-file updates |
+
+Files are mounted into the node container at `/usr/local/share/xray/`, overriding the default Xray geo files. Available categories include `geosite:ru-blocked`, `geoip:ru-blocked`, `geosite:category-ads-all`, and all standard v2fly categories.
+
+## TLS Certificates
+
+Certificates are issued via `acme.sh` using the webroot method (`/var/www/html`). nginx must be running on port 80 before this role runs.
+
+Files created in `remnawave_cert_dir`:
+- `<domain>.cer` — certificate
+- `<domain>.key` — private key (mode 0600)
+- `<domain>-fullchain.cer` — full chain (used in Xray inbound TLS config)
+
+Both the backend and node containers mount `remnawave_cert_dir`:
+- Backend: `/var/lib/remnawave/configs/xray/ssl:ro` — panel pushes certs to node via gRPC
+- Node: `/certs:ro` — reference in Xray inbound config as `/certs/<domain>-fullchain.cer` and `/certs/<domain>.key`
+
+## Example Playbook
+
+```yaml
+- name: Deploy Remnawave VPN panel
+  hosts: component_vless
+  roles:
+    - role: nginx        # required first — provides port 80 for acme.sh
+    - role: remnawave
+```
+
+### Minimal host vars
+
+```yaml
+remnawave_domain: "panel.example.com"
+remnawave_ssl_email: "admin@example.com"
+```
+
+### With pinned secrets (ansible-vault)
+
+```yaml
+remnawave_domain: "panel.example.com"
+remnawave_ssl_email: "admin@example.com"
+remnawave_postgres_password: "{{ vault_remnawave_postgres_password }}"
+remnawave_jwt_auth_secret: "{{ vault_remnawave_jwt_auth_secret }}"
+remnawave_jwt_api_tokens_secret: "{{ vault_remnawave_jwt_api_tokens_secret }}"
+remnawave_node_secret_key: "{{ vault_remnawave_node_secret_key }}"
+```
+
+## Post-install steps
+
+1. Open `https://{{ remnawave_domain }}/dashboard` in a browser
+2. Create the first admin account on the login page
+3. Go to **Nodes → Management** → add a node:
+   - `NODE_PORT`: value of `remnawave_node_port` (default `2222`)
+   - `SECRET_KEY`: stored in `{{ remnawave_node_dir }}/credentials.txt` — delete after saving
+4. Configure Xray inbounds (VLESS, Reality, etc.) in the panel
+   - Set Xray fallback destination to `127.0.0.1:{{ remnawave_nginx_fallback_port }}`
+   - Reference TLS certificates as `/certs/<domain>-fullchain.cer` and `/certs/<domain>.key`
+
+## Firewall
+
+This role does not manage firewall rules. Docker manages iptables directly — do not run `ansible-role-firewall` on the same host as Docker, as it will flush Docker chains and break container networking.
+
+Ensure ports 80 and 443 are open at the cloud provider level (security groups / VPS firewall UI).
+
+## Collections required
+
+- `community.docker`
+
+## Notes
+
+- The nginx fallback vhost listens on `127.0.0.1:8080` only — never exposed to the internet
+- Xray node configuration (inbounds, routing) is managed through the Remnawave Web UI, not by Ansible
+- PostgreSQL data persists in Docker volume `remnawave-db-data` — survives container restarts and role re-runs
+- Secrets auto-generated on first run are stored only in `.env` on the host — pin them in vault if you need to recreate the server

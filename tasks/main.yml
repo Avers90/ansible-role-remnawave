@@ -1,0 +1,62 @@
+---
+- name: remnawave | Fail if distribution is not supported
+  ansible.builtin.fail:
+    msg: "Distribution '{{ ansible_facts['distribution'] }}' is not supported."
+  when: ansible_facts['distribution'] not in ['Debian', 'Ubuntu']
+
+- name: remnawave | Fail if remnawave_domain is not set
+  ansible.builtin.fail:
+    msg: "remnawave_domain must be set (e.g. remnawave_domain: 'panel.example.com')"
+  when: remnawave_domain | length == 0
+
+- name: remnawave | Fail if remnawave_ssl_email is not set
+  ansible.builtin.fail:
+    msg: "remnawave_ssl_email must be set for Let's Encrypt certificate issuance"
+  when: remnawave_ssl_email | length == 0
+
+- name: remnawave | Issue TLS certificate
+  ansible.builtin.include_tasks:
+    file: ssl.yml
+
+- name: remnawave | Deploy panel (backend + postgres + redis)
+  ansible.builtin.include_tasks:
+    file: panel.yml
+
+- name: remnawave | Deploy node (Xray)
+  ansible.builtin.include_tasks:
+    file: node.yml
+
+- name: remnawave | Deploy nginx fallback vhost
+  ansible.builtin.include_tasks:
+    file: nginx.yml
+  when: remnawave_nginx_config_deploy | bool
+
+- name: remnawave | Display access information
+  ansible.builtin.debug:
+    msg:
+      - "======================================================"
+      - " Remnawave Panel deployed successfully"
+      - "======================================================"
+      - ""
+      - " Architecture:"
+      - "   Port 443  → remnawave/node (Xray, Docker host)"
+      - "              └── fallback → nginx:{{ remnawave_nginx_fallback_port }}"
+      - "   Port {{ remnawave_nginx_fallback_port }}  → nginx fallback vhost (127.0.0.1)"
+      - "              ├── /api/ /dashboard/ /sub/ → backend:{{ remnawave_app_port }}"
+      - "              └── / → {{ remnawave_site_root }} (decoy site)"
+      - "   Port {{ remnawave_app_port }}  → remnawave/backend (127.0.0.1)"
+      - "   Port {{ remnawave_node_port }}  → remnawave/node gRPC API"
+      - ""
+      - " Next steps:"
+      - "   1. Open https://{{ remnawave_domain }} in your browser"
+      - "   2. Create the first admin account on the login page"
+      - "   3. Go to Nodes → Management → add the node"
+      - "      NODE_PORT={{ remnawave_node_port }}"
+      - "      SECRET_KEY is in {{ remnawave_node_dir }}/credentials.txt"
+      - "   4. Configure Xray inbounds (VLESS/Reality) in the panel"
+      - "      Set Xray fallback to 127.0.0.1:{{ remnawave_nginx_fallback_port }}"
+      - ""
+      - " Useful commands:"
+      - "   docker compose -f {{ remnawave_install_dir }}/docker-compose.yml logs -f"
+      - "   docker compose -f {{ remnawave_node_dir }}/docker-compose.yml logs -f"
+      - "======================================================"

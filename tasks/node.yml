@@ -1,0 +1,103 @@
+---
+- name: remnawave | node | Create node directory
+  ansible.builtin.file:
+    path: "{{ remnawave_node_dir }}"
+    state: directory
+    mode: "0750"
+    owner: root
+    group: root
+
+- name: remnawave | node | Generate node secret key
+  ansible.builtin.set_fact:
+    remnawave_node_secret_key_value: "{{ remnawave_node_secret_key }}"
+  when: remnawave_node_secret_key | length > 0
+
+- name: remnawave | node | Auto-generate node secret key
+  ansible.builtin.shell:
+    cmd: openssl rand -hex 32
+  register: remnawave_node_secret_key_gen
+  changed_when: false
+  when: remnawave_node_secret_key | length == 0
+
+- name: remnawave | node | Set node secret key fact
+  ansible.builtin.set_fact:
+    remnawave_node_secret_key_value: "{{ remnawave_node_secret_key_gen.stdout }}"
+  when: remnawave_node_secret_key | length == 0
+
+- name: remnawave | node | Save node secret key to file
+  ansible.builtin.copy:
+    content: |
+      # {{ ansible_managed }}
+      # Remnawave Node credentials
+      # Delete this file after saving SECRET_KEY to the panel
+
+      NODE_PORT={{ remnawave_node_port }}
+      SECRET_KEY={{ remnawave_node_secret_key_value }}
+    dest: "{{ remnawave_node_dir }}/credentials.txt"
+    mode: "0600"
+    owner: root
+    group: root
+    force: false
+  no_log: true
+
+- name: remnawave | node | Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: node-compose.yml.j2
+    dest: "{{ remnawave_node_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart remnanode
+
+- name: remnawave | node | Start node container
+  community.docker.docker_compose_v2:
+    project_src: "{{ remnawave_node_dir }}"
+    state: present
+    pull: missing
+
+# Russia geo-files (russia-v2ray-rules-dat)
+- name: remnawave | node | Create geo-files directory
+  ansible.builtin.file:
+    path: "{{ remnawave_geo_dir }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  when: remnawave_geo_russia_enabled | bool
+
+- name: remnawave | node | Download geoip.dat
+  ansible.builtin.get_url:
+    url: "{{ remnawave_geo_geoip_url }}"
+    dest: "{{ remnawave_geo_dir }}/geoip.dat"
+    mode: "0644"
+    owner: root
+    group: root
+    force: true
+  when: remnawave_geo_russia_enabled | bool
+
+- name: remnawave | node | Download geosite.dat
+  ansible.builtin.get_url:
+    url: "{{ remnawave_geo_geosite_url }}"
+    dest: "{{ remnawave_geo_dir }}/geosite.dat"
+    mode: "0644"
+    owner: root
+    group: root
+    force: true
+  when: remnawave_geo_russia_enabled | bool
+
+- name: remnawave | node | Deploy cron job for geo-file updates
+  ansible.builtin.cron:
+    name: "Update russia v2ray geo files"
+    hour: "{{ remnawave_geo_cron_hour }}"
+    minute: "{{ remnawave_geo_cron_minute }}"
+    job: >-
+      curl -fsSL {{ remnawave_geo_geoip_url }} -o {{ remnawave_geo_dir }}/geoip.dat &&
+      curl -fsSL {{ remnawave_geo_geosite_url }} -o {{ remnawave_geo_dir }}/geosite.dat
+    state: present
+  when: remnawave_geo_russia_enabled | bool and remnawave_geo_cron_enabled | bool
+
+- name: remnawave | node | Remove cron job for geo-file updates
+  ansible.builtin.cron:
+    name: "Update russia v2ray geo files"
+    state: absent
+  when: not (remnawave_geo_russia_enabled | bool and remnawave_geo_cron_enabled | bool)
