@@ -24,9 +24,7 @@ services:
       options:
         max-size: 100m
         max-file: "5"
-    environment:
-      - NODE_PORT={{ remnawave_node_port }}
-      - SECRET_KEY={{ remnawave_node_secret_key_value }}
+    env_file: .env
     volumes:
       - '{{ remnawave_cert_dir }}:/certs:ro'
 {% if remnawave_geo_russia_enabled | bool %}
