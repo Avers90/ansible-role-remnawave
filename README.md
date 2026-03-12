@@ -32,12 +32,29 @@ Port 2222 → remnawave/node gRPC API (backend ↔ node)
 
 ## Role Variables
 
+### Component flags
+
+| Variable | Default | Description |
+|---|---|---|
+| `remnawave_panel_enabled` | `true` | Deploy backend + postgres + redis (the panel) |
+| `remnawave_node_enabled` | `true` | Deploy remnawave/node (Xray-core) |
+| `remnawave_ssl_enabled` | `true` | Issue TLS certificate via acme.sh. Set to `false` for Reality-only nodes (no domain needed) |
+
+### Deployment scenarios
+
+| Scenario | `panel_enabled` | `node_enabled` | `ssl_enabled` |
+|---|---|---|---|
+| Panel + node on one host (`remnawave-lv-01`) | `true` | `true` | `true` |
+| Panel only (`remnawave-panel-xx-01`) | `true` | `false` | `true` |
+| Node with TLS (`remnawave-node-de-01`) | `false` | `true` | `true` |
+| Node with Reality only | `false` | `true` | `false` |
+
 ### Required
 
 | Variable | Default | Description |
 |---|---|---|
-| `remnawave_domain` | `""` | Domain name for TLS certificate and panel access |
-| `remnawave_ssl_email` | `""` | Email for Let's Encrypt certificate issuance |
+| `remnawave_domain` | `""` | Domain name for TLS certificate. Required when `remnawave_ssl_enabled: true` |
+| `remnawave_ssl_email` | `""` | Email for Let's Encrypt. Required when `remnawave_ssl_enabled: true` |
 
 ### Paths
 
@@ -144,19 +161,56 @@ Both the backend and node containers mount `remnawave_cert_dir`:
 
 ## Example Playbook
 
+### Full stack — panel + node on one host
+
 ```yaml
-- name: Deploy Remnawave VPN panel
-  hosts: component_vless
+- name: Deploy Remnawave (panel + node)
+  hosts: component_remnawave
+  vars:
+    remnawave_panel_enabled: true
+    remnawave_node_enabled: true
   roles:
-    - role: nginx        # required first — provides port 80 for acme.sh
     - role: remnawave
 ```
 
-### Minimal host vars
+### Node only (e.g. remnawave-node-de-01)
+
+```yaml
+- name: Deploy Remnawave node
+  hosts: component_remnawave_node
+  vars:
+    remnawave_panel_enabled: false
+    remnawave_node_enabled: true
+  roles:
+    - role: remnawave
+```
+
+### Node with Reality only (no domain/cert)
+
+```yaml
+- name: Deploy Remnawave node (Reality)
+  hosts: component_remnawave_node
+  vars:
+    remnawave_panel_enabled: false
+    remnawave_node_enabled: true
+    remnawave_ssl_enabled: false
+  roles:
+    - role: remnawave
+```
+
+### Minimal host vars (panel + node)
 
 ```yaml
 remnawave_domain: "panel.example.com"
 remnawave_ssl_email: "admin@example.com"
+```
+
+### Minimal host vars (node only, TLS)
+
+```yaml
+remnawave_domain: "de.example.com"    # subdomain for this node
+remnawave_ssl_email: "admin@example.com"
+remnawave_node_secret_key: "{{ vault_remnawave_node_secret_key }}"
 ```
 
 ### With pinned secrets (ansible-vault)
@@ -205,6 +259,11 @@ Ensure ports 80 and 443 are open at the cloud provider level (security groups / 
 - Xray node configuration (inbounds, routing) is managed through the Remnawave Web UI, not by Ansible
 - PostgreSQL data persists in Docker volume `remnawave-db-data` — survives container restarts and role re-runs
 - Secrets auto-generated on first run are stored only in `.env` on the host — pin them in vault if you need to recreate the server
+- **Adding a new node** — checklist before deploying `remnawave-node-*`:
+  1. Create DNS A-record: `<node-domain>` → node IP (required for TLS-based protocols)
+  2. Set `remnawave_domain: "<node-domain>"` in host_vars
+  3. After deploy — add node in panel UI (Nodes → Management), copy `SECRET_KEY`, write to vault
+  4. If using **Reality only** — set `remnawave_ssl_enabled: false`, domain not required
 - **Node `.env` is deployed with `force: false`** — it is never overwritten after the first deploy. This protects `SECRET_KEY` from being reset. If you need to change `NODE_PORT` or other node variables, delete `/opt/remnanode/.env` on the target host before re-running the playbook, or edit the file manually and restart the container.
 - **TLS certificate file extensions**: acme.sh saves files as `<domain>.key` and `<domain>-fullchain.cer` (not `.pem`). Use these paths in Xray inbound TLS config:
   - `"keyFile": "/certs/<domain>.key"`

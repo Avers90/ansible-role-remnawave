@@ -4,27 +4,35 @@
     msg: "Distribution '{{ ansible_facts['distribution'] }}' is not supported."
   when: ansible_facts['distribution'] not in ['Debian', 'Ubuntu']
 
-- name: remnawave | Fail if remnawave_domain is not set
+- name: remnawave | Fail if neither panel nor node is enabled
   ansible.builtin.fail:
-    msg: "remnawave_domain must be set (e.g. remnawave_domain: 'panel.example.com')"
-  when: remnawave_domain | length == 0
+    msg: "At least one of remnawave_panel_enabled or remnawave_node_enabled must be true."
+  when: not remnawave_panel_enabled | bool and not remnawave_node_enabled | bool
 
-- name: remnawave | Fail if remnawave_ssl_email is not set
+- name: remnawave | Fail if remnawave_domain is not set (required when ssl_enabled)
   ansible.builtin.fail:
-    msg: "remnawave_ssl_email must be set for Let's Encrypt certificate issuance"
-  when: remnawave_ssl_email | length == 0
+    msg: "remnawave_domain must be set when remnawave_ssl_enabled: true (e.g. remnawave_domain: 'panel.example.com')"
+  when: remnawave_ssl_enabled | bool and remnawave_domain | length == 0
+
+- name: remnawave | Fail if remnawave_ssl_email is not set (required when ssl_enabled)
+  ansible.builtin.fail:
+    msg: "remnawave_ssl_email must be set when remnawave_ssl_enabled: true"
+  when: remnawave_ssl_enabled | bool and remnawave_ssl_email | length == 0
 
 - name: remnawave | Issue TLS certificate
   ansible.builtin.include_tasks:
     file: ssl.yml
+  when: remnawave_ssl_enabled | bool
 
 - name: remnawave | Deploy panel (backend + postgres + redis)
   ansible.builtin.include_tasks:
     file: panel.yml
+  when: remnawave_panel_enabled | bool
 
 - name: remnawave | Deploy node (Xray)
   ansible.builtin.include_tasks:
     file: node.yml
+  when: remnawave_node_enabled | bool
 
 - name: remnawave | Deploy nginx fallback vhost
   ansible.builtin.include_tasks:
@@ -33,33 +41,57 @@
 
 - name: remnawave | Display access information
   ansible.builtin.debug:
-    msg:
-      - "======================================================"
-      - " Remnawave Panel deployed successfully"
-      - "======================================================"
-      - ""
-      - " Architecture:"
-      - "   Port 443  → remnawave/node (Xray, Docker host)"
-      - "              └── fallback → nginx:{{ remnawave_nginx_fallback_port }}"
-      - "   Port {{ remnawave_nginx_fallback_port }}  → nginx fallback vhost (127.0.0.1)"
-      - "              ├── /api/ /dashboard/ /sub/ → backend:{{ remnawave_app_port }}"
-      - "              └── / → {{ remnawave_site_root }} (decoy site)"
-      - "   Port {{ remnawave_app_port }}  → remnawave/backend (127.0.0.1)"
-      - "   Port {{ remnawave_node_port }}  → remnawave/node gRPC API"
-      - ""
-      - " Next steps:"
-      - "   1. Open https://{{ remnawave_domain }} in your browser"
-      - "   2. Create the first admin account on the login page"
-      - "   3. Go to Nodes → Management → add the node:"
-      - "      NODE_PORT={{ remnawave_node_port }}"
-      - "      ADDRESS=172.18.0.1 (Docker gateway — verify: ip route | grep docker0)"
-      - "      Copy SECRET_KEY from panel UI"
-      - "   4. Paste SECRET_KEY into {{ remnawave_node_dir }}/.env and restart node:"
-      - "      docker compose -f {{ remnawave_node_dir }}/docker-compose.yml restart"
-      - "   5. Configure Xray inbounds (VLESS/Reality) in the panel"
-      - "      Set Xray fallback to 127.0.0.1:{{ remnawave_nginx_fallback_port }}"
-      - ""
-      - " Useful commands:"
-      - "   docker compose -f {{ remnawave_install_dir }}/docker-compose.yml logs -f"
-      - "   docker compose -f {{ remnawave_node_dir }}/docker-compose.yml logs -f"
-      - "======================================================"
+    msg: >-
+      {%- set lines = [] -%}
+      {%- set _ = lines.append('======================================================') -%}
+      {%- set _ = lines.append(' Remnawave deployed successfully') -%}
+      {%- set _ = lines.append('======================================================') -%}
+      {%- set _ = lines.append('') -%}
+      {%- set _ = lines.append(' Components deployed:') -%}
+      {%- if remnawave_ssl_enabled | bool -%}
+        {%- set _ = lines.append('   SSL certificate  : ' + remnawave_domain) -%}
+      {%- endif -%}
+      {%- if remnawave_panel_enabled | bool -%}
+        {%- set _ = lines.append('   Panel (backend)  : 127.0.0.1:' + remnawave_app_port | string) -%}
+        {%- set _ = lines.append('   PostgreSQL       : 127.0.0.1:6767') -%}
+        {%- set _ = lines.append('   Metrics          : 127.0.0.1:' + remnawave_metrics_port | string) -%}
+      {%- endif -%}
+      {%- if remnawave_node_enabled | bool -%}
+        {%- set _ = lines.append('   Node (Xray)      : port 443 (network_mode: host)') -%}
+        {%- set _ = lines.append('   Node gRPC        : 0.0.0.0:' + remnawave_node_port | string) -%}
+      {%- endif -%}
+      {%- if remnawave_nginx_config_deploy | bool -%}
+        {%- set _ = lines.append('   nginx fallback   : 127.0.0.1:' + remnawave_nginx_fallback_port | string) -%}
+      {%- endif -%}
+      {%- set _ = lines.append('') -%}
+      {%- set _ = lines.append(' Next steps:') -%}
+      {%- if remnawave_panel_enabled | bool -%}
+        {%- set _ = lines.append('   1. Open https://' + remnawave_domain + '/dashboard') -%}
+        {%- set _ = lines.append('   2. Create the first admin account') -%}
+        {%- set _ = lines.append('   3. Go to Nodes → Management → add node:') -%}
+        {%- set _ = lines.append('      ADDRESS=172.18.0.1 (Docker gateway — verify: ip route | grep docker0)') -%}
+        {%- set _ = lines.append('      NODE_PORT=' + remnawave_node_port | string) -%}
+        {%- set _ = lines.append('      Copy SECRET_KEY from panel UI') -%}
+        {%- set _ = lines.append('   4. Paste SECRET_KEY into ' + remnawave_node_dir + '/.env and restart node') -%}
+        {%- set _ = lines.append('   5. Configure Xray inbounds in the panel') -%}
+        {%- set _ = lines.append('   6. Enable inbound in Settings → Config Profiles → Default-Profile') -%}
+      {%- else -%}
+        {%- set _ = lines.append('   1. Add this node in the panel (Nodes → Management):') -%}
+        {%- set _ = lines.append('      ADDRESS=' + ansible_host | default(inventory_hostname)) -%}
+        {%- set _ = lines.append('      NODE_PORT=' + remnawave_node_port | string) -%}
+        {%- set _ = lines.append('      Copy SECRET_KEY from panel UI') -%}
+        {%- set _ = lines.append('   2. Paste SECRET_KEY into ' + remnawave_node_dir + '/.env') -%}
+        {%- set _ = lines.append('      echo "SECRET_KEY=<value>" >> ' + remnawave_node_dir + '/.env') -%}
+        {%- set _ = lines.append('      docker compose -f ' + remnawave_node_dir + '/docker-compose.yml restart') -%}
+        {%- set _ = lines.append('   3. Configure Xray inbounds for this node in the panel') -%}
+      {%- endif -%}
+      {%- set _ = lines.append('') -%}
+      {%- set _ = lines.append(' Useful commands:') -%}
+      {%- if remnawave_panel_enabled | bool -%}
+        {%- set _ = lines.append('   docker compose -f ' + remnawave_install_dir + '/docker-compose.yml logs -f') -%}
+      {%- endif -%}
+      {%- if remnawave_node_enabled | bool -%}
+        {%- set _ = lines.append('   docker compose -f ' + remnawave_node_dir + '/docker-compose.yml logs -f') -%}
+      {%- endif -%}
+      {%- set _ = lines.append('======================================================') -%}
+      {{ lines }}

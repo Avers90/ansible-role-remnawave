@@ -27,7 +27,9 @@ server {
     proxy_hide_header Strict-Transport-Security;
     proxy_hide_header Content-Security-Policy;
 
+{% if remnawave_panel_enabled | bool %}
     # Remnawave Panel — static assets and locales (served by backend)
+    # Only present when panel is deployed on this host
     location ~ ^/(assets|locales)/ {
         proxy_pass http://127.0.0.1:{{ remnawave_app_port }};
         proxy_http_version 1.1;
@@ -51,7 +53,9 @@ server {
         proxy_read_timeout 86400;
     }
 
-    # Decoy static site — serves for all other requests
+{% endif %}
+    # Decoy static site — always present (anti-blocking fallback for Xray)
+    # On node-only hosts this is the only location block
     location / {
         try_files $uri $uri/ =404;
     }

@@ -15,15 +15,32 @@ remnawave_node_dir: /opt/remnanode
 remnawave_cert_dir: /opt/remnawave/certs
 
 ## =====================
+## Component flags
+## =====================
+
+## Deploy Remnawave backend + postgres + redis (the panel)
+## Set to false on node-only hosts (remnawave-node-*)
+remnawave_panel_enabled: true
+
+## Deploy remnawave/node (Xray-core via Docker)
+## Set to false on panel-only hosts (remnawave-panel-*)
+remnawave_node_enabled: true
+
+## Issue TLS certificate via acme.sh (webroot method)
+## Set to false when using Reality-only (no domain/cert needed)
+## When false, remnawave_domain and remnawave_ssl_email are not required
+remnawave_ssl_enabled: true
+
+## =====================
 ## Required variables
 ## =====================
 
-## Domain name for the panel (used for TLS cert + subscription URL)
-## MUST be set — role will fail if empty
+## Domain name for TLS certificate and panel/node access
+## Required when remnawave_ssl_enabled: true
 remnawave_domain: ""
 
 ## Email for acme.sh Let's Encrypt certificate issuance
-## MUST be set — role will fail if empty
+## Required when remnawave_ssl_enabled: true
 remnawave_ssl_email: ""
 
 ## =====================
