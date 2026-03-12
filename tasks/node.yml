@@ -40,22 +40,8 @@
     force: false
   no_log: true
 
-- name: remnawave | node | Deploy docker-compose.yml
-  ansible.builtin.template:
-    src: node-compose.yml.j2
-    dest: "{{ remnawave_node_dir }}/docker-compose.yml"
-    mode: "0644"
-    owner: root
-    group: root
-  notify: Restart remnanode
-
-- name: remnawave | node | Start node container
-  community.docker.docker_compose_v2:
-    project_src: "{{ remnawave_node_dir }}"
-    state: present
-    pull: missing
-
-# Russia geo-files (russia-v2ray-rules-dat)
+# Russia geo-files must be downloaded BEFORE starting the container
+# because they are bind-mounted into the node container at startup
 - name: remnawave | node | Create geo-files directory
   ansible.builtin.file:
     path: "{{ remnawave_geo_dir }}"
@@ -84,6 +70,21 @@
     group: root
     force: true
   when: remnawave_geo_russia_enabled | bool
+
+- name: remnawave | node | Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: node-compose.yml.j2
+    dest: "{{ remnawave_node_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart remnanode
+
+- name: remnawave | node | Start node container
+  community.docker.docker_compose_v2:
+    project_src: "{{ remnawave_node_dir }}"
+    state: present
+    pull: missing
 
 - name: remnawave | node | Deploy cron job for geo-file updates
   ansible.builtin.cron:
