@@ -110,10 +110,17 @@ remnawave_sub_public_domain: ""
 ## Set to false to manage nginx config manually
 remnawave_nginx_config_deploy: true
 
-## Port nginx listens on for Xray fallback
+## Port nginx listens on for Xray fallback (panel + decoy static site)
 ## nginx listens on 0.0.0.0 (not 127.0.0.1) so Docker containers can reach it via gateway IP.
 ## Access is restricted via allow/deny to loopback + RFC-1918 ranges.
 remnawave_nginx_fallback_port: 8080
+
+## Dedicated port for subscription page nginx vhost.
+## Xray TLS fallback does NOT preserve the Host header, so server_name matching on a shared port
+## won't work. Instead, use a separate port and route by SNI in Xray inbound fallbacks:
+##   { "name": "<subscription_page_domain>", "dest": <this port>, "xver": 0 }  ← add BEFORE the default fallback
+##   { "dest": <nginx_fallback_port>, "xver": 0 }                               ← default (panel + decoy)
+remnawave_nginx_subscription_port: 8081
 
 ## Docker bridge gateway IP — the host as seen from inside Docker containers.
 ## Used by subscription page to reach nginx (which proxies to backend with correct headers).

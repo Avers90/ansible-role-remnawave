@@ -77,13 +77,21 @@ server {
 }
 {% if remnawave_subscription_page_enabled | bool and remnawave_subscription_page_domain | length > 0 %}
 
-# Subscription Page — served via Xray fallback (same path as panel traffic)
-# Port 443 is owned by Xray (network_mode: host); nginx listens on 0.0.0.0:{{ remnawave_nginx_fallback_port }}
-# Xray forwards traffic here based on SNI fallback; nginx routes by Host header
+# Subscription Page — dedicated port for Xray SNI-based fallback routing
+#
+# Why a separate port (not server_name on 8080):
+#   Xray TLS fallback does NOT preserve the original Host header.
+#   nginx receives the request with an empty/IP Host, so server_name matching
+#   on port 8080 would never match "sub.example.com".
+#   Solution: subscription page listens on a dedicated port ({{ remnawave_nginx_subscription_port }}).
+#   In Xray inbound settings add a fallback BEFORE the default one:
+#     { "name": "{{ remnawave_subscription_page_domain }}", "dest": {{ remnawave_nginx_subscription_port }}, "xver": 0 }
+#   Xray matches by SNI (name) and routes to {{ remnawave_nginx_subscription_port }};
+#   all other traffic falls through to the default fallback (port {{ remnawave_nginx_fallback_port }}).
 server {
-    listen {{ remnawave_nginx_fallback_port }};
+    listen {{ remnawave_nginx_subscription_port }};
 
-    server_name {{ remnawave_subscription_page_domain }};
+    server_name _;
 
     # Allow only loopback and private/Docker subnets
     allow 127.0.0.0/8;
