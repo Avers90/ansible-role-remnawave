@@ -28,9 +28,3 @@
     dest: /etc/nginx/sites-enabled/remnawave.conf
     state: link
   notify: Reload nginx
-
-- name: remnawave | nginx | Disable default vhost (conflicts with fallback port)
-  ansible.builtin.file:
-    path: /etc/nginx/sites-enabled/default
-    state: absent
-  notify: Reload nginx
