@@ -60,11 +60,11 @@
       -d "*.{{ remnawave_domain }}"
       --dns dns_cf
       {{ '--force' if remnawave_ssl_force_renew | bool else '' }}
-  register: remnawave_cert_issue
-  changed_when: "'Cert success' in remnawave_cert_issue.stdout"
+  register: remnawave_cert_issue_cf
+  changed_when: "'Cert success' in remnawave_cert_issue_cf.stdout"
   failed_when:
-    - remnawave_cert_issue.rc != 0
-    - "'Domains not changed' not in remnawave_cert_issue.stdout"
+    - remnawave_cert_issue_cf.rc != 0
+    - "'Domains not changed' not in remnawave_cert_issue_cf.stdout"
   no_log: true
   when:
     - remnawave_ssl_cloudflare_enabled | bool
@@ -81,11 +81,11 @@
       --issue
       -d {{ remnawave_domain }}
       --webroot /var/www/html
-  register: remnawave_cert_issue
-  changed_when: "'Cert success' in remnawave_cert_issue.stdout"
+  register: remnawave_cert_issue_webroot
+  changed_when: "'Cert success' in remnawave_cert_issue_webroot.stdout"
   failed_when:
-    - remnawave_cert_issue.rc != 0
-    - "'Domains not changed' not in remnawave_cert_issue.stdout"
+    - remnawave_cert_issue_webroot.rc != 0
+    - "'Domains not changed' not in remnawave_cert_issue_webroot.stdout"
   when:
     - not remnawave_ssl_cloudflare_enabled | bool
     - not remnawave_cert_stat.stat.exists
@@ -104,7 +104,10 @@
       --key-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}.key
       --fullchain-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}-fullchain.cer
       --reloadcmd "docker compose -f {{ remnawave_install_dir }}/docker-compose.yml restart remnawave || true"
-  when: not remnawave_cert_stat.stat.exists or (remnawave_cert_issue is defined and remnawave_cert_issue.changed)
+  when: >-
+    not remnawave_cert_stat.stat.exists
+    or (remnawave_cert_issue_cf is defined and remnawave_cert_issue_cf.changed | default(false))
+    or (remnawave_cert_issue_webroot is defined and remnawave_cert_issue_webroot.changed | default(false))
 
 - name: remnawave | ssl | Fix certificate file permissions
   ansible.builtin.file:
@@ -118,7 +121,10 @@
     - { name: "{{ remnawave_domain }}-fullchain.cer", mode: "0644" }
   loop_control:
     label: "{{ item.name }}"
-  when: not remnawave_cert_stat.stat.exists or (remnawave_cert_issue is defined and remnawave_cert_issue.changed)
+  when: >-
+    not remnawave_cert_stat.stat.exists
+    or (remnawave_cert_issue_cf is defined and remnawave_cert_issue_cf.changed | default(false))
+    or (remnawave_cert_issue_webroot is defined and remnawave_cert_issue_webroot.changed | default(false))
 
 # Note: subscription page does NOT need its own TLS certificate.
 # TLS is terminated by Xray (port 443, network_mode: host).
