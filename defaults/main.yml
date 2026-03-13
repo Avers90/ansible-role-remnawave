@@ -191,6 +191,29 @@ remnawave_geo_cron_hour: "4"
 remnawave_geo_cron_minute: "0"
 
 ## =====================
+## Cloudflare DNS challenge (wildcard TLS)
+## =====================
+## Use Cloudflare DNS API instead of webroot challenge.
+## Required for wildcard certificates (*.example.com).
+## When enabled, issues: -d example.com -d "*.example.com" via dns_cf.
+## When disabled (default), uses webroot challenge for single domain only.
+##
+## Cloudflare API token permissions required:
+##   Zone → DNS → Edit (for the specific zone)
+##
+## Create token: Cloudflare Dashboard → My Profile → API Tokens → Create Token
+
+## Enable Cloudflare DNS challenge (wildcard cert)
+remnawave_ssl_cloudflare_enabled: false
+
+## Cloudflare API token — store in ansible-vault
+remnawave_ssl_cloudflare_token: ""
+
+## Cloudflare Zone ID (optional — acme.sh auto-detects from token, but faster if set)
+## Find at: Cloudflare Dashboard → select domain → Overview → right sidebar → Zone ID
+remnawave_ssl_cloudflare_zone_id: ""
+
+## =====================
 ## Subscription Page
 ## =====================
 ## Lightweight web UI for end-users — shows subscription link, app instructions, QR codes.

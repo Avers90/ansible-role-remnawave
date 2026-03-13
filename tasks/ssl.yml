@@ -43,6 +43,36 @@
     path: "{{ remnawave_cert_dir }}/{{ remnawave_domain }}.cer"
   register: remnawave_cert_stat
 
+# =====================
+# Cloudflare DNS challenge — wildcard certificate (*.domain + domain)
+# =====================
+
+- name: remnawave | ssl | Issue wildcard certificate via Cloudflare DNS challenge
+  ansible.builtin.shell:
+    cmd: >
+      CF_Token="{{ remnawave_ssl_cloudflare_token }}"
+      {% if remnawave_ssl_cloudflare_zone_id | length > 0 %}
+      CF_Zone_ID="{{ remnawave_ssl_cloudflare_zone_id }}"
+      {% endif %}
+      /root/.acme.sh/acme.sh
+      --issue
+      -d {{ remnawave_domain }}
+      -d "*.{{ remnawave_domain }}"
+      --dns dns_cf
+  register: remnawave_cert_issue
+  changed_when: "'Cert success' in remnawave_cert_issue.stdout"
+  failed_when:
+    - remnawave_cert_issue.rc != 0
+    - "'Domains not changed' not in remnawave_cert_issue.stdout"
+  no_log: true
+  when:
+    - remnawave_ssl_cloudflare_enabled | bool
+    - not remnawave_cert_stat.stat.exists
+
+# =====================
+# Webroot challenge — single domain (no wildcard)
+# =====================
+
 - name: remnawave | ssl | Issue SSL certificate via webroot
   ansible.builtin.command:
     cmd: >
@@ -55,7 +85,13 @@
   failed_when:
     - remnawave_cert_issue.rc != 0
     - "'Domains not changed' not in remnawave_cert_issue.stdout"
-  when: not remnawave_cert_stat.stat.exists
+  when:
+    - not remnawave_ssl_cloudflare_enabled | bool
+    - not remnawave_cert_stat.stat.exists
+
+# =====================
+# Install certificate (both modes use same paths)
+# =====================
 
 - name: remnawave | ssl | Install SSL certificate
   ansible.builtin.command:
@@ -87,3 +123,4 @@
 # TLS is terminated by Xray (port 443, network_mode: host).
 # Xray forwards plaintext HTTP to nginx 127.0.0.1:8080 via fallback.
 # nginx routes by Host header to the subscription page container.
+# Wildcard cert (*.domain) issued above covers sub.domain automatically for Xray.
