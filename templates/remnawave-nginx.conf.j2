@@ -112,6 +112,17 @@ server {
     proxy_hide_header Strict-Transport-Security;
     proxy_hide_header Content-Security-Policy;
 
+    # Intercept upstream errors — serve decoy site on root 502/503/504
+    proxy_intercept_errors on;
+
+    # Root path: subscription page returns empty reply when no shortUUID given.
+    # Serve decoy static site instead to avoid exposing nginx 502 to DPI/censors.
+    location = / {
+        root {{ remnawave_site_root }};
+        index index.html index.htm;
+        try_files /index.html =404;
+    }
+
     # Allow dot-files served by the subscription page app (e.g. /assets/.app-config-v2.json).
     # These are dynamic endpoints in the Node.js container, not filesystem hidden files.
     # Must be declared BEFORE the generic "location ~ /\." deny block.
@@ -133,6 +144,8 @@ server {
         proxy_set_header   X-Forwarded-Proto https;  # Always https — arrives via Xray TLS
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
+        # Fallback to decoy site if subscription page is unavailable
+        error_page 502 503 504 =200 /index.html;
     }
 
     location ~ /\. {
