@@ -110,9 +110,16 @@ remnawave_sub_public_domain: ""
 ## Set to false to manage nginx config manually
 remnawave_nginx_config_deploy: true
 
-## Port nginx listens on for Xray fallback (127.0.0.1 only)
-## Xray forwards non-VPN HTTPS traffic here
+## Port nginx listens on for Xray fallback
+## nginx listens on 0.0.0.0 (not 127.0.0.1) so Docker containers can reach it via gateway IP.
+## Access is restricted via allow/deny to loopback + RFC-1918 ranges.
 remnawave_nginx_fallback_port: 8080
+
+## Docker bridge gateway IP — the host as seen from inside Docker containers.
+## Used by subscription page to reach nginx (which proxies to backend with correct headers).
+## Default for the first bridge network (remnawave-network uses 172.18.0.0/16).
+## Verify: docker network inspect remnawave-network --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+remnawave_docker_gateway_ip: "172.18.0.1"
 
 ## Document root for the decoy static site
 remnawave_site_root: /var/www/html
@@ -212,6 +219,11 @@ remnawave_ssl_cloudflare_token: ""
 ## Cloudflare Zone ID (optional — acme.sh auto-detects from token, but faster if set)
 ## Find at: Cloudflare Dashboard → select domain → Overview → right sidebar → Zone ID
 remnawave_ssl_cloudflare_zone_id: ""
+
+## Force re-issue TLS certificate even if it already exists.
+## Use once (e.g. to switch from single-domain to wildcard), then set back to false.
+## When true, passes --force to acme.sh and runs --installcert regardless of cert_stat.
+remnawave_ssl_force_renew: false
 
 ## =====================
 ## Subscription Page

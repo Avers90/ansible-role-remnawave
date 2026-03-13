@@ -59,6 +59,7 @@
       -d {{ remnawave_domain }}
       -d "*.{{ remnawave_domain }}"
       --dns dns_cf
+      {{ '--force' if remnawave_ssl_force_renew | bool else '' }}
   register: remnawave_cert_issue
   changed_when: "'Cert success' in remnawave_cert_issue.stdout"
   failed_when:
@@ -67,7 +68,7 @@
   no_log: true
   when:
     - remnawave_ssl_cloudflare_enabled | bool
-    - not remnawave_cert_stat.stat.exists
+    - not remnawave_cert_stat.stat.exists or remnawave_ssl_force_renew | bool
 
 # =====================
 # Webroot challenge — single domain (no wildcard)

@@ -1,12 +1,22 @@
 # {{ ansible_managed }}
 # Remnawave nginx fallback vhost
-# Listens on 127.0.0.1:{{ remnawave_nginx_fallback_port }} — not exposed to the internet
+# Listens on 0.0.0.0:{{ remnawave_nginx_fallback_port }} with allow/deny (loopback + RFC-1918 only)
 # Xray node forwards non-VPN HTTPS traffic here via fallback destination
 
 server {
-    listen 127.0.0.1:{{ remnawave_nginx_fallback_port }};
+    # Listen on all interfaces so Docker containers (subscription page, etc.) can reach
+    # nginx via the Docker gateway IP (e.g. 172.18.0.1:8080).
+    # Access is restricted to localhost and RFC-1918 ranges via allow/deny below.
+    listen {{ remnawave_nginx_fallback_port }};
 
     server_name _;
+
+    # Allow only loopback and private/Docker subnets — block everything else
+    allow 127.0.0.0/8;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
+    deny all;
 
     root {{ remnawave_site_root }};
     index index.html index.htm;
@@ -68,12 +78,19 @@ server {
 {% if remnawave_subscription_page_enabled | bool and remnawave_subscription_page_domain | length > 0 %}
 
 # Subscription Page — served via Xray fallback (same path as panel traffic)
-# Port 443 is owned by Xray (network_mode: host); nginx only listens on 127.0.0.1:8080
+# Port 443 is owned by Xray (network_mode: host); nginx listens on 0.0.0.0:{{ remnawave_nginx_fallback_port }}
 # Xray forwards traffic here based on SNI fallback; nginx routes by Host header
 server {
-    listen 127.0.0.1:{{ remnawave_nginx_fallback_port }};
+    listen {{ remnawave_nginx_fallback_port }};
 
     server_name {{ remnawave_subscription_page_domain }};
+
+    # Allow only loopback and private/Docker subnets
+    allow 127.0.0.0/8;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
+    deny all;
 
     access_log /var/log/nginx/remnawave-sub-access.log main;
     error_log  /var/log/nginx/remnawave-sub-error.log;
