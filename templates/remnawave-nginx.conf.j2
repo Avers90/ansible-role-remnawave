@@ -7,12 +7,15 @@ server {
     # Listen on all interfaces so Docker containers (subscription page, etc.) can reach
     # nginx via the Docker gateway IP (e.g. 172.18.0.1:8080).
     # Access is restricted to localhost and RFC-1918 ranges via allow/deny below.
+    # Both IPv4 and IPv6 are required: Xray (network_mode: host) uses [::1] loopback for fallbacks.
     listen {{ remnawave_nginx_fallback_port }};
+    listen [::]:{{ remnawave_nginx_fallback_port }};
 
     server_name _;
 
     # Allow only loopback and private/Docker subnets — block everything else
     allow 127.0.0.0/8;
+    allow ::1;           # IPv6 loopback — Xray (network_mode: host) uses [::1] for fallbacks
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
@@ -89,12 +92,15 @@ server {
 #   Xray matches by SNI (name) and routes to {{ remnawave_nginx_subscription_port }};
 #   all other traffic falls through to the default fallback (port {{ remnawave_nginx_fallback_port }}).
 server {
+    # Both IPv4 and IPv6: Xray uses [::1] loopback for SNI-based fallback to this port.
     listen {{ remnawave_nginx_subscription_port }};
+    listen [::]:{{ remnawave_nginx_subscription_port }};
 
     server_name _;
 
     # Allow only loopback and private/Docker subnets
     allow 127.0.0.0/8;
+    allow ::1;           # IPv6 loopback — Xray (network_mode: host) uses [::1] for fallbacks
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
