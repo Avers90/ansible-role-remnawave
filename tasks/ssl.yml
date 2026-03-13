@@ -104,10 +104,10 @@
       --key-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}.key
       --fullchain-file {{ remnawave_cert_dir }}/{{ remnawave_domain }}-fullchain.cer
       --reloadcmd "docker compose -f {{ remnawave_install_dir }}/docker-compose.yml restart remnawave || true"
-  when: >-
-    not remnawave_cert_stat.stat.exists
-    or (remnawave_cert_issue_cf is defined and remnawave_cert_issue_cf.changed | default(false))
-    or (remnawave_cert_issue_webroot is defined and remnawave_cert_issue_webroot.changed | default(false))
+  # acme.sh --installcert is idempotent (copies files + registers reloadcmd).
+  # Run on every play to keep install paths and reloadcmd up to date.
+  # changed_when: false avoids spurious "changed" in normal runs.
+  changed_when: false
 
 - name: remnawave | ssl | Fix certificate file permissions
   ansible.builtin.file:
@@ -121,10 +121,14 @@
     - { name: "{{ remnawave_domain }}-fullchain.cer", mode: "0644" }
   loop_control:
     label: "{{ item.name }}"
-  when: >-
-    not remnawave_cert_stat.stat.exists
-    or (remnawave_cert_issue_cf is defined and remnawave_cert_issue_cf.changed | default(false))
-    or (remnawave_cert_issue_webroot is defined and remnawave_cert_issue_webroot.changed | default(false))
+
+- name: remnawave | ssl | Restart node to reload wildcard certificate
+  community.docker.docker_compose_v2:
+    project_src: "{{ remnawave_node_dir }}"
+    state: restarted
+  when:
+    - remnawave_node_enabled | bool
+    - remnawave_cert_issue_cf is defined and remnawave_cert_issue_cf.changed | default(false)
 
 # Note: subscription page does NOT need its own TLS certificate.
 # TLS is terminated by Xray (port 443, network_mode: host).
