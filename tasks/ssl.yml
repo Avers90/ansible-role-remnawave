@@ -83,61 +83,7 @@
     label: "{{ item.name }}"
   when: not remnawave_cert_stat.stat.exists or (remnawave_cert_issue is defined and remnawave_cert_issue.changed)
 
-# =====================
-# Subscription page TLS certificate
-# =====================
-
-- name: remnawave | ssl | Check if subscription page certificate already exists
-  ansible.builtin.stat:
-    path: "{{ remnawave_cert_dir }}/{{ remnawave_subscription_page_domain }}.cer"
-  register: remnawave_sub_cert_stat
-  when: remnawave_subscription_page_enabled | bool and remnawave_subscription_page_domain | length > 0
-
-- name: remnawave | ssl | Issue subscription page SSL certificate via webroot
-  ansible.builtin.command:
-    cmd: >
-      /root/.acme.sh/acme.sh
-      --issue
-      -d {{ remnawave_subscription_page_domain }}
-      --webroot /var/www/html
-  register: remnawave_sub_cert_issue
-  changed_when: "'Cert success' in remnawave_sub_cert_issue.stdout"
-  failed_when:
-    - remnawave_sub_cert_issue.rc != 0
-    - "'Domains not changed' not in remnawave_sub_cert_issue.stdout"
-  when:
-    - remnawave_subscription_page_enabled | bool
-    - remnawave_subscription_page_domain | length > 0
-    - not remnawave_sub_cert_stat.stat.exists
-
-- name: remnawave | ssl | Install subscription page SSL certificate
-  ansible.builtin.command:
-    cmd: >
-      /root/.acme.sh/acme.sh
-      --installcert
-      -d {{ remnawave_subscription_page_domain }}
-      --cert-file {{ remnawave_cert_dir }}/{{ remnawave_subscription_page_domain }}.cer
-      --key-file {{ remnawave_cert_dir }}/{{ remnawave_subscription_page_domain }}.key
-      --fullchain-file {{ remnawave_cert_dir }}/{{ remnawave_subscription_page_domain }}-fullchain.cer
-      --reloadcmd "nginx -t && systemctl reload nginx || true"
-  when:
-    - remnawave_subscription_page_enabled | bool
-    - remnawave_subscription_page_domain | length > 0
-    - not remnawave_sub_cert_stat.stat.exists or (remnawave_sub_cert_issue is defined and remnawave_sub_cert_issue.changed)
-
-- name: remnawave | ssl | Fix subscription page certificate file permissions
-  ansible.builtin.file:
-    path: "{{ remnawave_cert_dir }}/{{ item.name }}"
-    mode: "{{ item.mode }}"
-    owner: root
-    group: root
-  loop:
-    - { name: "{{ remnawave_subscription_page_domain }}.key", mode: "0600" }
-    - { name: "{{ remnawave_subscription_page_domain }}.cer", mode: "0644" }
-    - { name: "{{ remnawave_subscription_page_domain }}-fullchain.cer", mode: "0644" }
-  loop_control:
-    label: "{{ item.name }}"
-  when:
-    - remnawave_subscription_page_enabled | bool
-    - remnawave_subscription_page_domain | length > 0
-    - not remnawave_sub_cert_stat.stat.exists or (remnawave_sub_cert_issue is defined and remnawave_sub_cert_issue.changed)
+# Note: subscription page does NOT need its own TLS certificate.
+# TLS is terminated by Xray (port 443, network_mode: host).
+# Xray forwards plaintext HTTP to nginx 127.0.0.1:8080 via fallback.
+# nginx routes by Host header to the subscription page container.
