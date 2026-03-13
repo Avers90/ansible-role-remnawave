@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+---
+services:
+  remnawave-subscription-page:
+    image: remnawave/subscription-page:{{ remnawave_subscription_page_version }}
+    container_name: remnawave-subscription-page
+    hostname: remnawave-subscription-page
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:{{ remnawave_subscription_page_port }}:{{ remnawave_subscription_page_port }}"
+    networks:
+      - remnawave-network
+
+networks:
+  remnawave-network:
+    driver: bridge
+    external: true

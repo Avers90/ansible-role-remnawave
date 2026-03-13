@@ -34,6 +34,11 @@
     file: node.yml
   when: remnawave_node_enabled | bool
 
+- name: remnawave | Deploy subscription page
+  ansible.builtin.include_tasks:
+    file: subscription.yml
+  when: remnawave_subscription_page_enabled | bool and remnawave_panel_enabled | bool
+
 - name: remnawave | Deploy nginx fallback vhost
   ansible.builtin.include_tasks:
     file: nginx.yml

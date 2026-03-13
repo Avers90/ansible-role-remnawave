@@ -191,6 +191,42 @@ remnawave_geo_cron_hour: "4"
 remnawave_geo_cron_minute: "0"
 
 ## =====================
+## Subscription Page
+## =====================
+## Lightweight web UI for end-users — shows subscription link, app instructions, QR codes.
+## Hides the panel domain from users (served on a separate subdomain).
+##
+## Two-stage deployment required on fresh install (chicken-and-egg):
+##   Stage 1: deploy with remnawave_subscription_page_enabled: false
+##            → panel starts → create API token in Settings → API Tokens
+##            → store token in vault as vault_remnawave_subscription_api_token
+##   Stage 2: set remnawave_subscription_page_enabled: true → re-run playbook
+
+## Enable subscription page deployment
+## Requires remnawave_panel_enabled: true (subscription page talks to the backend)
+remnawave_subscription_page_enabled: false
+
+## Docker image tag for remnawave/subscription-page
+remnawave_subscription_page_version: "latest"
+
+## Public domain for the subscription page (e.g. sub.example.com)
+## Must have a DNS A record pointing to this server
+## Required when remnawave_subscription_page_enabled: true
+remnawave_subscription_page_domain: ""
+
+## API token for subscription page to authenticate with Remnawave backend
+## Create in panel: Settings → API Tokens
+## Required when remnawave_subscription_page_enabled: true
+## Store in ansible-vault: vault_remnawave_subscription_api_token
+remnawave_subscription_page_api_token: ""
+
+## Port subscription page listens on (127.0.0.1 only, proxied by nginx)
+remnawave_subscription_page_port: 3010
+
+## Directory for subscription page docker-compose and .env
+remnawave_subscription_page_dir: "{{ remnawave_install_dir }}/subscription"
+
+## =====================
 ## Service
 ## =====================
 
