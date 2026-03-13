@@ -54,7 +54,7 @@ server {
     }
 
     # Remnawave Panel API and frontend
-    location ~* ^/(api|dashboard|docs|scalar|openapi\.json|statics|{{ remnawave_sub_public_domain_value | regex_replace('^.+/', '') | default('sub', true) }}) {
+    location ~* ^/(api|dashboard|docs|scalar|openapi\.json|statics|sub) {
         proxy_pass http://127.0.0.1:{{ remnawave_app_port }};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
