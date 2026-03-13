@@ -269,9 +269,34 @@ remnawave_subscription_page_port: 3010
 remnawave_subscription_page_dir: "{{ remnawave_install_dir }}/subscription"
 
 ## =====================
-## Service
+## Webhook (optional)
 ## =====================
+## Webhook sends HTTP POST on user/node events to an external URL.
 
-remnawave_service_name: remnawave
-remnawave_service_enabled: true
-remnawave_service_state: started
+## Enable webhook
+remnawave_webhook_enabled: false
+
+## Webhook target URL (required when enabled)
+remnawave_webhook_url: ""
+
+## =====================
+## Bandwidth usage notifications (optional)
+## =====================
+## Notify via Telegram when a user reaches a bandwidth threshold (%).
+## Requires remnawave_telegram_enabled: true
+
+remnawave_bandwidth_notifications_enabled: false
+
+## Thresholds (percent of used traffic) — list of integers
+remnawave_bandwidth_notifications_threshold: [60, 80]
+
+## =====================
+## Not-connected users notifications (optional)
+## =====================
+## Notify via Telegram about users who have never connected after N hours.
+## Requires remnawave_telegram_enabled: true
+
+remnawave_not_connected_notifications_enabled: false
+
+## Hours after which to notify — list of integers
+remnawave_not_connected_notifications_hours: [6, 24, 48]

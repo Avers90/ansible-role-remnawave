@@ -29,6 +29,7 @@
   ansible.builtin.command:
     cmd: /root/.acme.sh/acme.sh --upgrade --auto-upgrade
   changed_when: false
+  when: not remnawave_acmesh_stat.stat.exists
 
 - name: remnawave | ssl | Create certificate directory
   ansible.builtin.file:
@@ -43,52 +44,28 @@
     path: "{{ remnawave_cert_dir }}/{{ remnawave_domain }}.cer"
   register: remnawave_cert_stat
 
-# =====================
-# Cloudflare DNS challenge — wildcard certificate (*.domain + domain)
-# =====================
-
-- name: remnawave | ssl | Issue wildcard certificate via Cloudflare DNS challenge
+# Cloudflare DNS challenge: issues wildcard *.domain + domain
+# Webroot challenge: issues single domain only (requires nginx on port 80)
+- name: remnawave | ssl | Issue TLS certificate
   ansible.builtin.shell:
     cmd: >
+      {% if remnawave_ssl_cloudflare_enabled | bool %}
       CF_Token="{{ remnawave_ssl_cloudflare_token }}"
-      {% if remnawave_ssl_cloudflare_zone_id | length > 0 %}
-      CF_Zone_ID="{{ remnawave_ssl_cloudflare_zone_id }}"
+      {% if remnawave_ssl_cloudflare_zone_id | length > 0 %}CF_Zone_ID="{{ remnawave_ssl_cloudflare_zone_id }}"{% endif %}
       {% endif %}
-      /root/.acme.sh/acme.sh
-      --issue
+      /root/.acme.sh/acme.sh --issue
       -d {{ remnawave_domain }}
-      -d "*.{{ remnawave_domain }}"
-      --dns dns_cf
+      {% if remnawave_ssl_cloudflare_enabled | bool %}-d "*.{{ remnawave_domain }}" --dns dns_cf
+      {% else %}--webroot /var/www/html
+      {% endif %}
       {{ '--force' if remnawave_ssl_force_renew | bool else '' }}
-  register: remnawave_cert_issue_cf
-  changed_when: "'Cert success' in remnawave_cert_issue_cf.stdout"
+  register: remnawave_cert_issue
+  changed_when: "'Cert success' in remnawave_cert_issue.stdout"
   failed_when:
-    - remnawave_cert_issue_cf.rc != 0
-    - "'Domains not changed' not in remnawave_cert_issue_cf.stdout"
-  no_log: true
-  when:
-    - remnawave_ssl_cloudflare_enabled | bool
-    - not remnawave_cert_stat.stat.exists or remnawave_ssl_force_renew | bool
-
-# =====================
-# Webroot challenge — single domain (no wildcard)
-# =====================
-
-- name: remnawave | ssl | Issue SSL certificate via webroot
-  ansible.builtin.command:
-    cmd: >
-      /root/.acme.sh/acme.sh
-      --issue
-      -d {{ remnawave_domain }}
-      --webroot /var/www/html
-  register: remnawave_cert_issue_webroot
-  changed_when: "'Cert success' in remnawave_cert_issue_webroot.stdout"
-  failed_when:
-    - remnawave_cert_issue_webroot.rc != 0
-    - "'Domains not changed' not in remnawave_cert_issue_webroot.stdout"
-  when:
-    - not remnawave_ssl_cloudflare_enabled | bool
-    - not remnawave_cert_stat.stat.exists
+    - remnawave_cert_issue.rc != 0
+    - "'Domains not changed' not in remnawave_cert_issue.stdout"
+  no_log: "{{ remnawave_ssl_cloudflare_enabled | bool }}"
+  when: not remnawave_cert_stat.stat.exists or remnawave_ssl_force_renew | bool
 
 # =====================
 # Install certificate (both modes use same paths)
@@ -128,7 +105,8 @@
     state: restarted
   when:
     - remnawave_node_enabled | bool
-    - remnawave_cert_issue_cf is defined and remnawave_cert_issue_cf.changed | default(false)
+    - remnawave_ssl_cloudflare_enabled | bool
+    - remnawave_cert_issue is defined and remnawave_cert_issue.changed | default(false)
 
 # Note: subscription page does NOT need its own TLS certificate.
 # TLS is terminated by Xray (port 443, network_mode: host).

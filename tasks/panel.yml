@@ -7,97 +7,14 @@
     owner: root
     group: root
 
-- name: remnawave | panel | Generate JWT auth secret
+- name: remnawave | panel | Resolve secrets and computed variables
   ansible.builtin.set_fact:
-    remnawave_jwt_auth_secret_value: "{{ remnawave_jwt_auth_secret }}"
-  when: remnawave_jwt_auth_secret | length > 0
-
-- name: remnawave | panel | Auto-generate JWT auth secret
-  ansible.builtin.shell:
-    cmd: openssl rand -hex 64
-  register: remnawave_jwt_auth_secret_gen
-  changed_when: false
-  when: remnawave_jwt_auth_secret | length == 0
-
-- name: remnawave | panel | Set JWT auth secret fact
-  ansible.builtin.set_fact:
-    remnawave_jwt_auth_secret_value: "{{ remnawave_jwt_auth_secret_gen.stdout }}"
-  when: remnawave_jwt_auth_secret | length == 0
-
-- name: remnawave | panel | Generate JWT API tokens secret
-  ansible.builtin.set_fact:
-    remnawave_jwt_api_tokens_secret_value: "{{ remnawave_jwt_api_tokens_secret }}"
-  when: remnawave_jwt_api_tokens_secret | length > 0
-
-- name: remnawave | panel | Auto-generate JWT API tokens secret
-  ansible.builtin.shell:
-    cmd: openssl rand -hex 64
-  register: remnawave_jwt_api_tokens_secret_gen
-  changed_when: false
-  when: remnawave_jwt_api_tokens_secret | length == 0
-
-- name: remnawave | panel | Set JWT API tokens secret fact
-  ansible.builtin.set_fact:
-    remnawave_jwt_api_tokens_secret_value: "{{ remnawave_jwt_api_tokens_secret_gen.stdout }}"
-  when: remnawave_jwt_api_tokens_secret | length == 0
-
-- name: remnawave | panel | Generate postgres password
-  ansible.builtin.set_fact:
-    remnawave_postgres_password_value: "{{ remnawave_postgres_password }}"
-  when: remnawave_postgres_password | length > 0
-
-- name: remnawave | panel | Auto-generate postgres password
-  ansible.builtin.shell:
-    cmd: openssl rand -hex 24
-  register: remnawave_postgres_password_gen
-  changed_when: false
-  when: remnawave_postgres_password | length == 0
-
-- name: remnawave | panel | Set postgres password fact
-  ansible.builtin.set_fact:
-    remnawave_postgres_password_value: "{{ remnawave_postgres_password_gen.stdout }}"
-  when: remnawave_postgres_password | length == 0
-
-- name: remnawave | panel | Generate metrics password
-  ansible.builtin.set_fact:
-    remnawave_metrics_pass_value: "{{ remnawave_metrics_pass }}"
-  when: remnawave_metrics_pass | length > 0
-
-- name: remnawave | panel | Auto-generate metrics password
-  ansible.builtin.shell:
-    cmd: openssl rand -hex 16
-  register: remnawave_metrics_pass_gen
-  changed_when: false
-  when: remnawave_metrics_pass | length == 0
-
-- name: remnawave | panel | Set metrics password fact
-  ansible.builtin.set_fact:
-    remnawave_metrics_pass_value: "{{ remnawave_metrics_pass_gen.stdout }}"
-  when: remnawave_metrics_pass | length == 0
-
-- name: remnawave | panel | Set subscription public domain
-  ansible.builtin.set_fact:
-    remnawave_sub_public_domain_value: >-
-      {{ remnawave_sub_public_domain
-         if remnawave_sub_public_domain | length > 0
-         else remnawave_domain ~ '/api/sub' }}
-
-- name: remnawave | panel | Set webhook secret header
-  ansible.builtin.set_fact:
-    remnawave_webhook_secret_header_value: "{{ remnawave_webhook_secret_header }}"
-  when: remnawave_webhook_secret_header | length > 0
-
-- name: remnawave | panel | Auto-generate webhook secret header
-  ansible.builtin.shell:
-    cmd: openssl rand -hex 64
-  register: remnawave_webhook_secret_header_gen
-  changed_when: false
-  when: remnawave_webhook_secret_header | length == 0
-
-- name: remnawave | panel | Set webhook secret header fact
-  ansible.builtin.set_fact:
-    remnawave_webhook_secret_header_value: "{{ remnawave_webhook_secret_header_gen.stdout }}"
-  when: remnawave_webhook_secret_header | length == 0
+    remnawave_jwt_auth_secret_value: "{{ remnawave_jwt_auth_secret | default(lookup('pipe', 'openssl rand -hex 64'), true) }}"
+    remnawave_jwt_api_tokens_secret_value: "{{ remnawave_jwt_api_tokens_secret | default(lookup('pipe', 'openssl rand -hex 64'), true) }}"
+    remnawave_postgres_password_value: "{{ remnawave_postgres_password | default(lookup('pipe', 'openssl rand -hex 24'), true) }}"
+    remnawave_metrics_pass_value: "{{ remnawave_metrics_pass | default(lookup('pipe', 'openssl rand -hex 16'), true) }}"
+    remnawave_webhook_secret_header_value: "{{ remnawave_webhook_secret_header | default(lookup('pipe', 'openssl rand -hex 64'), true) }}"
+    remnawave_sub_public_domain_value: "{{ remnawave_sub_public_domain if remnawave_sub_public_domain | length > 0 else remnawave_domain ~ '/api/sub' }}"
 
 - name: remnawave | panel | Deploy .env file
   ansible.builtin.template:
