@@ -1,99 +1,26 @@
 # {{ ansible_managed }}
-# Remnawave nginx fallback vhost
-# Listens on 0.0.0.0:{{ remnawave_nginx_fallback_port }} with allow/deny (loopback + RFC-1918 only)
-# Xray node forwards non-VPN HTTPS traffic here via fallback destination
-
-server {
-    # Listen on all interfaces so Docker containers (subscription page, etc.) can reach
-    # nginx via the Docker gateway IP (e.g. 172.18.0.1:8080).
-    # Access is restricted to localhost and RFC-1918 ranges via allow/deny below.
-    # Both IPv4 and IPv6 are required: Xray (network_mode: host) uses [::1] loopback for fallbacks.
-    listen {{ remnawave_nginx_fallback_port }};
-    listen [::]:{{ remnawave_nginx_fallback_port }};
-
-    server_name _;
-
-    # Allow only loopback and private/Docker subnets — block everything else
-    allow 127.0.0.0/8;
-    allow ::1;           # IPv6 loopback — Xray (network_mode: host) uses [::1] for fallbacks
-    allow 10.0.0.0/8;
-    allow 172.16.0.0/12;
-    allow 192.168.0.0/16;
-    deny all;
-
-    root {{ remnawave_site_root }};
-    index index.html index.htm;
-
-    access_log {{ remnawave_site_access_log }} main;
-    error_log {{ remnawave_site_error_log }};
-
-{% if remnawave_site_security_headers | bool %}
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-
-{% endif %}
-    # Strip security headers from backend that would break plain-HTTP fallback access
-    # (backend sends upgrade-insecure-requests CSP and HSTS which cause ERR_ABORTED in browser
-    #  when accessed over plain HTTP via SSH tunnel or direct fallback connection)
-    proxy_hide_header Strict-Transport-Security;
-    proxy_hide_header Content-Security-Policy;
-
-{% if remnawave_panel_enabled | bool %}
-    # Remnawave Panel — static assets and locales (served by backend)
-    # Only present when panel is deployed on this host
-    location ~ ^/(assets|locales)/ {
-        proxy_pass http://127.0.0.1:{{ remnawave_app_port }};
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;  # Always https — traffic arrives via Xray TLS fallback
-        proxy_read_timeout 86400;
-    }
-
-    # Remnawave Panel API and frontend
-    location ~* ^/(api|dashboard|docs|scalar|openapi\.json|statics|sub) {
-        proxy_pass http://127.0.0.1:{{ remnawave_app_port }};
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;  # Always https — traffic arrives via Xray TLS fallback
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
-    }
-
-{% endif %}
-    # Decoy static site — always present (anti-blocking fallback for Xray)
-    # On node-only hosts this is the only location block
-    location / {
-        try_files $uri $uri/ =404;
-    }
-
-    # Deny hidden files
-    location ~ /\. {
-        deny all;
-    }
-}
-{% if remnawave_subscription_page_enabled | bool and remnawave_subscription_page_domain | length > 0 %}
-
-# Subscription Page — catch-all on port {{ remnawave_nginx_fallback_port }} for host-based routing
+# Remnawave nginx vhost
+# Port {{ remnawave_nginx_fallback_port }} — Xray forwards non-VPN HTTPS traffic here via fallback
+# Access restricted to loopback and RFC-1918 ranges (Docker gateway + Xray loopback)
 #
-# Xray TLS fallback routes by SNI to port {{ remnawave_nginx_subscription_port }} (see server block below).
-# However, in some cases (e.g. traffic routed through Xray LOOPBACK outbound or direct
-# HTTPS connections that don't trigger the SNI-named fallback) the Host header is preserved
-# but the request lands on port {{ remnawave_nginx_fallback_port }} instead of {{ remnawave_nginx_subscription_port }}.
-# This block ensures such requests are still served correctly by matching the Host header.
+# server_name routing on a single port:
+#   {{ remnawave_subscription_page_domain }} → subscription page (port {{ remnawave_subscription_page_port }})
+#   _                                        → panel API + decoy static site
+#
+# Xray inbound fallbacks should be:
+#   { "dest": {{ remnawave_nginx_fallback_port }}, "xver": 0 }   ← single fallback, nginx handles routing by Host
+
+# Common allow/deny and proxy settings shared by all server blocks
+# (nginx does not support shared include blocks inline, so repeated per block)
+
+{% if remnawave_subscription_page_enabled | bool and remnawave_subscription_page_domain | length > 0 %}
+# --- Subscription Page ---
 server {
     listen {{ remnawave_nginx_fallback_port }};
     listen [::]:{{ remnawave_nginx_fallback_port }};
 
     server_name {{ remnawave_subscription_page_domain }};
 
-    # Allow only loopback and private/Docker subnets
     allow 127.0.0.0/8;
     allow ::1;
     allow 10.0.0.0/8;
@@ -106,111 +33,97 @@ server {
 
     proxy_hide_header Strict-Transport-Security;
     proxy_hide_header Content-Security-Policy;
-
     proxy_intercept_errors on;
 
+    # Root path — serve decoy site (subscription page returns empty on /)
     location = / {
         root {{ remnawave_site_root }};
-        index index.html index.htm;
         try_files /index.html =404;
     }
 
+    # Dot-files inside /assets/ (e.g. /assets/.app-config-v2.json) — dynamic, not filesystem
     location ~ ^/assets/\. {
         proxy_pass         http://127.0.0.1:{{ remnawave_subscription_page_port }};
         proxy_http_version 1.1;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto https;
     }
 
     location / {
         proxy_pass         http://127.0.0.1:{{ remnawave_subscription_page_port }};
         proxy_http_version 1.1;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto https;
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
         error_page 502 503 504 =200 /index.html;
     }
 
-    location ~ /\. {
-        deny all;
-    }
+    location ~ /\. { deny all; }
 }
 
-# Subscription Page — dedicated port for Xray SNI-based fallback routing
-#
-# Why a separate port (not server_name on 8080):
-#   Xray TLS fallback does NOT preserve the original Host header.
-#   nginx receives the request with an empty/IP Host, so server_name matching
-#   on port 8080 would never match "sub.example.com".
-#   Solution: subscription page listens on a dedicated port ({{ remnawave_nginx_subscription_port }}).
-#   In Xray inbound settings add a fallback BEFORE the default one:
-#     { "name": "{{ remnawave_subscription_page_domain }}", "dest": {{ remnawave_nginx_subscription_port }}, "xver": 0 }
-#   Xray matches by SNI (name) and routes to {{ remnawave_nginx_subscription_port }};
-#   all other traffic falls through to the default fallback (port {{ remnawave_nginx_fallback_port }}).
+{% endif %}
+# --- Panel + decoy (catch-all) ---
 server {
-    # Both IPv4 and IPv6: Xray uses [::1] loopback for SNI-based fallback to this port.
-    listen {{ remnawave_nginx_subscription_port }};
-    listen [::]:{{ remnawave_nginx_subscription_port }};
+    listen {{ remnawave_nginx_fallback_port }} default_server;
+    listen [::]:{{ remnawave_nginx_fallback_port }} default_server;
 
-    server_name _;
+    server_name {% if remnawave_panel_enabled | bool %}{{ remnawave_domain }}{% endif %} _;
 
-    # Allow only loopback and private/Docker subnets
     allow 127.0.0.0/8;
-    allow ::1;           # IPv6 loopback — Xray (network_mode: host) uses [::1] for fallbacks
+    allow ::1;
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
     allow 192.168.0.0/16;
     deny all;
 
-    access_log /var/log/nginx/remnawave-sub-access.log main;
-    error_log  /var/log/nginx/remnawave-sub-error.log;
+    root {{ remnawave_site_root }};
+    index index.html index.htm;
 
+    access_log {{ remnawave_site_access_log }} main;
+    error_log  {{ remnawave_site_error_log }};
+
+{% if remnawave_site_security_headers | bool %}
+    add_header X-Frame-Options      "SAMEORIGIN"              always;
+    add_header X-Content-Type-Options "nosniff"               always;
+    add_header Referrer-Policy      "no-referrer-when-downgrade" always;
+
+{% endif %}
+    # Strip headers that break plain-HTTP access (SSH tunnel, Xray fallback)
     proxy_hide_header Strict-Transport-Security;
     proxy_hide_header Content-Security-Policy;
 
-    # Intercept upstream errors — serve decoy site on root 502/503/504
-    proxy_intercept_errors on;
-
-    # Root path: subscription page returns empty reply when no shortUUID given.
-    # Serve decoy static site instead to avoid exposing nginx 502 to DPI/censors.
-    location = / {
-        root {{ remnawave_site_root }};
-        index index.html index.htm;
-        try_files /index.html =404;
-    }
-
-    # Allow dot-files served by the subscription page app (e.g. /assets/.app-config-v2.json).
-    # These are dynamic endpoints in the Node.js container, not filesystem hidden files.
-    # Must be declared BEFORE the generic "location ~ /\." deny block.
-    location ~ ^/assets/\. {
-        proxy_pass         http://127.0.0.1:{{ remnawave_subscription_page_port }};
+{% if remnawave_panel_enabled | bool %}
+    location ~ ^/(assets|locales)/ {
+        proxy_pass http://127.0.0.1:{{ remnawave_app_port }};
         proxy_http_version 1.1;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 86400;
     }
 
-    location / {
-        proxy_pass         http://127.0.0.1:{{ remnawave_subscription_page_port }};
+    location ~* ^/(api|dashboard|docs|scalar|openapi\.json|statics|sub) {
+        proxy_pass http://127.0.0.1:{{ remnawave_app_port }};
         proxy_http_version 1.1;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto https;  # Always https — arrives via Xray TLS
-        proxy_read_timeout 60s;
-        proxy_send_timeout 60s;
-        # Fallback to decoy site if subscription page is unavailable
-        error_page 502 503 504 =200 /index.html;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_read_timeout 86400;
     }
 
-    location ~ /\. {
-        deny all;
-    }
-}
 {% endif %}
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ /\. { deny all; }
+}
