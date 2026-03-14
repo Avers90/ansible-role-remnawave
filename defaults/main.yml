@@ -87,10 +87,19 @@ remnawave_postgres_password: ""
 remnawave_node_secret_key: ""
 
 ## Prometheus metrics basic auth password
+## Auto-generated (openssl rand -hex 16) if empty.
+## IMPORTANT: pin this in host_vars after first run to prevent .env changes on every playbook run.
+## After first deploy: ssh user@host sudo grep METRICS_PASS /opt/remnawave/.env
+##   vault.yml:  vault_remnawave_metrics_pass: "<value>"
+##   main.yml:   remnawave_metrics_pass: "{{ vault_remnawave_metrics_pass }}"
 remnawave_metrics_pass: ""
 
 ## Webhook secret header (at least 32 chars, only a-z, 0-9, A-Z)
-## Auto-generated if empty. Set explicitly if webhook is enabled.
+## Auto-generated (openssl rand -hex 64) if empty.
+## IMPORTANT: pin this in host_vars after first run — same reason as metrics_pass above.
+## After first deploy: ssh user@host sudo grep WEBHOOK_SECRET_HEADER /opt/remnawave/.env
+##   vault.yml:  vault_remnawave_webhook_secret_header: "<value>"
+##   main.yml:   remnawave_webhook_secret_header: "{{ vault_remnawave_webhook_secret_header }}"
 remnawave_webhook_secret_header: ""
 
 ## =====================
