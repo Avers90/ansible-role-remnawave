@@ -80,6 +80,67 @@ server {
 }
 {% if remnawave_subscription_page_enabled | bool and remnawave_subscription_page_domain | length > 0 %}
 
+# Subscription Page — catch-all on port {{ remnawave_nginx_fallback_port }} for host-based routing
+#
+# Xray TLS fallback routes by SNI to port {{ remnawave_nginx_subscription_port }} (see server block below).
+# However, in some cases (e.g. traffic routed through Xray LOOPBACK outbound or direct
+# HTTPS connections that don't trigger the SNI-named fallback) the Host header is preserved
+# but the request lands on port {{ remnawave_nginx_fallback_port }} instead of {{ remnawave_nginx_subscription_port }}.
+# This block ensures such requests are still served correctly by matching the Host header.
+server {
+    listen {{ remnawave_nginx_fallback_port }};
+    listen [::]:{{ remnawave_nginx_fallback_port }};
+
+    server_name {{ remnawave_subscription_page_domain }};
+
+    # Allow only loopback and private/Docker subnets
+    allow 127.0.0.0/8;
+    allow ::1;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
+    deny all;
+
+    access_log /var/log/nginx/remnawave-sub-access.log main;
+    error_log  /var/log/nginx/remnawave-sub-error.log;
+
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header Content-Security-Policy;
+
+    proxy_intercept_errors on;
+
+    location = / {
+        root {{ remnawave_site_root }};
+        index index.html index.htm;
+        try_files /index.html =404;
+    }
+
+    location ~ ^/assets/\. {
+        proxy_pass         http://127.0.0.1:{{ remnawave_subscription_page_port }};
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+    }
+
+    location / {
+        proxy_pass         http://127.0.0.1:{{ remnawave_subscription_page_port }};
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        error_page 502 503 504 =200 /index.html;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}
+
 # Subscription Page — dedicated port for Xray SNI-based fallback routing
 #
 # Why a separate port (not server_name on 8080):
