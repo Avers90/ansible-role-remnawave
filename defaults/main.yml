@@ -39,6 +39,10 @@ remnawave_ssl_enabled: true
 ## Required when remnawave_ssl_enabled: true
 remnawave_domain: ""
 
+## Panel domain used for generating direct links (e.g. in Telegram notifications with inline buttons)
+## Optional — defaults to remnawave_domain if empty
+remnawave_panel_domain: ""
+
 ## Email for acme.sh Let's Encrypt certificate issuance
 ## Required when remnawave_ssl_enabled: true
 remnawave_ssl_email: ""
@@ -48,10 +52,10 @@ remnawave_ssl_email: ""
 ## =====================
 
 ## Docker image tag for remnawave/backend
-remnawave_panel_version: "latest"
+remnawave_panel_version: "v2.7.1"
 
 ## Docker image tag for remnawave/node
-remnawave_node_version: "latest"
+remnawave_node_version: "v2.7.0"
 
 ## =====================
 ## Ports
@@ -145,12 +149,29 @@ remnawave_site_security_headers: true
 ## =====================
 ## Telegram notifications (optional)
 ## =====================
+## v2.7.0 format: "chat_id:thread_id" (thread_id is optional, e.g. "123456789" or "123456789:42")
 
 remnawave_telegram_enabled: false
 remnawave_telegram_bot_token: ""
-remnawave_telegram_notify_users_chat_id: ""
-remnawave_telegram_notify_nodes_chat_id: ""
-remnawave_telegram_notify_crm_chat_id: ""
+remnawave_telegram_notify_users: ""
+remnawave_telegram_notify_nodes: ""
+remnawave_telegram_notify_crm: ""
+remnawave_telegram_notify_service: ""
+remnawave_telegram_notify_tblocker: ""
+
+## Optional: proxy for Telegram Bot API requests (format: protocol://user:password@host:port)
+remnawave_telegram_bot_proxy: ""
+
+## Optional: custom Telegram Bot API server URL (default: https://api.telegram.org)
+remnawave_telegram_bot_api_root: ""
+
+## =====================
+## Docker pull policy
+## =====================
+
+## Docker image pull policy: "missing" (default) or "always"
+## Override with -e remnawave_pull_policy=always when updating images
+remnawave_pull_policy: "missing"
 
 ## =====================
 ## Optional features
@@ -251,7 +272,7 @@ remnawave_ssl_force_renew: false
 remnawave_subscription_page_enabled: false
 
 ## Docker image tag for remnawave/subscription-page
-remnawave_subscription_page_version: "latest"
+remnawave_subscription_page_version: "v7.1.8"
 
 ## Public domain for the subscription page (e.g. sub.example.com)
 ## Must have a DNS A record pointing to this server

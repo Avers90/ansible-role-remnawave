@@ -39,7 +39,7 @@
   community.docker.docker_compose_v2:
     project_src: "{{ remnawave_install_dir }}"
     state: present
-    pull: missing
+    pull: "{{ remnawave_pull_policy }}"
 
 - name: remnawave | panel | Wait for backend to be ready
   ansible.builtin.wait_for:

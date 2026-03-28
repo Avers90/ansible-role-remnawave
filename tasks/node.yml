@@ -68,7 +68,7 @@
   community.docker.docker_compose_v2:
     project_src: "{{ remnawave_node_dir }}"
     state: present
-    pull: missing
+    pull: "{{ remnawave_pull_policy }}"
 
 - name: remnawave | node | Deploy cron job for geo-file updates
   ansible.builtin.cron:
