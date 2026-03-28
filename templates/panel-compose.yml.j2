@@ -34,8 +34,6 @@ services:
       # Mount TLS certificates for Xray config (VLESS TLS transport)
       # Panel pushes certs to node via gRPC when referenced in Xray config
       - "{{ remnawave_cert_dir }}:/var/lib/remnawave/configs/xray/ssl:ro"
-      # Shared Valkey Unix socket (v2.7.0+)
-      - valkey-socket:/tmp/valkey
     healthcheck:
       test: ['CMD-SHELL', 'curl -sf http://localhost:{{ remnawave_metrics_port }}/health || exit 1']
       interval: 30s
@@ -79,13 +77,8 @@ services:
       --appendonly no
       --maxmemory-policy noeviction
       --loglevel warning
-      --port 0
-      --unixsocket /tmp/valkey/valkey.sock
-      --unixsocketperm 777
-    volumes:
-      - valkey-socket:/tmp/valkey
     healthcheck:
-      test: ['CMD', 'valkey-cli', '-s', '/tmp/valkey/valkey.sock', 'ping']
+      test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
       timeout: 3s
       retries: 3
@@ -101,7 +94,4 @@ volumes:
     name: remnawave-db-data
     driver: local
     external: false
-  valkey-socket:
-    name: valkey-socket
-    driver: local
-    external: false
+
