@@ -52,10 +52,10 @@ remnawave_ssl_email: ""
 ## =====================
 
 ## Docker image tag for remnawave/backend
-remnawave_panel_version: "v2.7.1"
+remnawave_panel_version: "2.7.1"
 
 ## Docker image tag for remnawave/node
-remnawave_node_version: "v2.7.0"
+remnawave_node_version: "2.7.0"
 
 ## =====================
 ## Ports
@@ -272,7 +272,7 @@ remnawave_ssl_force_renew: false
 remnawave_subscription_page_enabled: false
 
 ## Docker image tag for remnawave/subscription-page
-remnawave_subscription_page_version: "v7.1.8"
+remnawave_subscription_page_version: "7.1.8"
 
 ## Public domain for the subscription page (e.g. sub.example.com)
 ## Must have a DNS A record pointing to this server
