@@ -52,7 +52,7 @@ remnawave_ssl_email: ""
 ## =====================
 
 ## Docker image tag for remnawave/backend
-remnawave_panel_version: "2.7.1"
+remnawave_panel_version: "2.7.4"
 
 ## Docker image tag for remnawave/node
 remnawave_node_version: "2.7.0"
